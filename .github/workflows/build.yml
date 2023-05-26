@@ -30,27 +30,34 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Build wheels
-        uses: pypa/cibuildwheel@v2.8.1
+      - name: Upgrade pip and build
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install --upgrade build
+
+      - name: Build wheel
+        run: python3 -m build
             
       - name: Upload binary wheel
         uses: actions/upload-artifact@v3
         with:
-          path: ./wheelhouse/*.whl
+          path: ./dist/*.whl
       
-  # deploy:
-  #   needs:
-  #     - check-version-numbers
-  #     - package-python
-  #   runs-on: ubuntu-latest
-  #   if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags')
+  deploy:
+    needs:
+      - check-version-numbers
+      - package-python
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags')
       
-  #   steps:
-  #     - name: Download distributions
-  #       uses: actions/download-artifact@v2
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v2
 
-  #     - name: Rename distributions
-  #       run: |
+      - name: Rename distributions
+        run: |
+          ls -R
+
   #         mkdir dist
   #         ls bdist.*/
   #         mv bdist.*/libdash-*.whl dist/
