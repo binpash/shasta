@@ -6,7 +6,7 @@ authors = [
 ]
 description = "A shell AST library in Python"
 readme = "README.md"
-license = { file="LICENCE" }
+license = { file="LICENSE" }
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Python :: 3",
