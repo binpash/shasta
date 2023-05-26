@@ -1,0 +1,74 @@
+name: Main workflow
+
+on:
+  pull_request:
+  push:
+  schedule:
+    - cron: '5 14 * * *'
+
+jobs:
+  check-version-numbers:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Check version numbers
+        run: ./version.sh
+  
+  package-python:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+
+    runs-on: ${{ matrix.os }}
+
+    steps:      
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v2.8.1
+            
+      - name: Upload binary wheel
+        uses: actions/upload-artifact@v3
+        with:
+          path: ./wheelhouse/*.whl
+      
+  # deploy:
+  #   needs:
+  #     - check-version-numbers
+  #     - package-python
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags')
+      
+  #   steps:
+  #     - name: Download distributions
+  #       uses: actions/download-artifact@v2
+
+  #     - name: Rename distributions
+  #       run: |
+  #         mkdir dist
+  #         ls bdist.*/
+  #         mv bdist.*/libdash-*.whl dist/
+  #         mv sdist/libdash-*.tar.gz dist/
+  #         echo Look on my Works, ye Mighty, and despair!
+  #         ls dist
+
+  #     - name: Deploy test distribution to Test PyPI
+  #       uses: pypa/gh-action-pypi-publish@release/v1
+  #       with:
+  #         password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+  #         verbose: true
+  #         repository_url: https://test.pypi.org/legacy/
+  #         skip_existing: true            
+              
+  #     - name: Deploy tagged release on PyPI
+  #       if: startsWith(github.ref, 'refs/tags')
+  #       uses: pypa/gh-action-pypi-publish@release/v1
+  #       with:
+  #         password: ${{ secrets.PYPI_API_TOKEN }}
+  #         verbose: true
