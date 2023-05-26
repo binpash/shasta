@@ -55,12 +55,6 @@ jobs:
       - name: Download distributions
         uses: actions/download-artifact@v2
 
-      - name: Rename distributions
-        run: |
-          # mkdir dist
-          # mv shasta*.whl dist/
-          ls dist
-
       - name: Deploy test distribution to Test PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
