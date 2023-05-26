@@ -48,7 +48,7 @@ jobs:
       - check-version-numbers
       - package-python
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags')
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags')
       
     steps:
       - name: Download distributions
@@ -56,26 +56,21 @@ jobs:
 
       - name: Rename distributions
         run: |
-          ls -R
+          mkdir dist
+          mv shasta*.whl dist/
+          ls dist
 
-  #         mkdir dist
-  #         ls bdist.*/
-  #         mv bdist.*/libdash-*.whl dist/
-  #         mv sdist/libdash-*.tar.gz dist/
-  #         echo Look on my Works, ye Mighty, and despair!
-  #         ls dist
-
-  #     - name: Deploy test distribution to Test PyPI
-  #       uses: pypa/gh-action-pypi-publish@release/v1
-  #       with:
-  #         password: ${{ secrets.TEST_PYPI_API_TOKEN }}
-  #         verbose: true
-  #         repository_url: https://test.pypi.org/legacy/
-  #         skip_existing: true            
+      - name: Deploy test distribution to Test PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          verbose: true
+          repository_url: https://test.pypi.org/legacy/
+          skip_existing: true            
               
-  #     - name: Deploy tagged release on PyPI
-  #       if: startsWith(github.ref, 'refs/tags')
-  #       uses: pypa/gh-action-pypi-publish@release/v1
-  #       with:
-  #         password: ${{ secrets.PYPI_API_TOKEN }}
-  #         verbose: true
+      - name: Deploy tagged release on PyPI
+        if: startsWith(github.ref, 'refs/tags')
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          verbose: true
