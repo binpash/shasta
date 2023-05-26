@@ -1,1 +1,3 @@
 *__pycache__*
+dist/*
+shasta.egg-info/*
