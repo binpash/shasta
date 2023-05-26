@@ -1,0 +1,20 @@
+[project]
+name = "shasta"
+version = "0.0.1"
+authors = [
+  { name="Konstantinos Kallas", email="konstantinos.kallas@hotmail.com" },
+]
+description = "A shell AST library in Python"
+readme = "README.md"
+license = { file="LICENCE" }
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: System :: System Shells",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/binpash/shasta"
+"Bug Tracker" = "https://github.com/binpash/shasta/issues"
