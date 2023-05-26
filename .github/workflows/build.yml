@@ -41,6 +41,7 @@ jobs:
       - name: Upload binary wheel
         uses: actions/upload-artifact@v3
         with:
+          name: dist
           path: ./dist/*.whl
       
   deploy:
@@ -56,8 +57,8 @@ jobs:
 
       - name: Rename distributions
         run: |
-          mkdir dist
-          mv shasta*.whl dist/
+          # mkdir dist
+          # mv shasta*.whl dist/
           ls dist
 
       - name: Deploy test distribution to Test PyPI
