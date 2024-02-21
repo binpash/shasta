@@ -1,6 +1,6 @@
 import abc
 from json import JSONEncoder
-from shasta.print_lib import * 
+from .print_lib import *
 
 class AstNode(metaclass=abc.ABCMeta):
     NodeName = 'None'
@@ -227,7 +227,7 @@ class RedirNode(Command):
 
 class BackgroundNode(Command):
     NodeName = 'Background'
-    line_number: int
+    line_number: [int, None]  # bash has no line number for background nodes
     node: Command
     redir_list: list
 
@@ -827,3 +827,38 @@ def ast_match(ast_node, cases, *args):
 ## Util function
 def make_kv(key, val):
     return [key, val]
+
+
+##### BASH SPECIFIC NODES #####
+
+class SelectNode(Command):
+    NodeName = 'Select'
+    line_number: int
+    variable: object
+    body: Command
+    map_list: list[list[ArgChar]]
+
+    def __init__(self, line_number, variable, body, map_list):
+        self.line_number = line_number
+        self.variable = variable
+        self.body = body
+        self.map_list = map_list
+
+    def __repr__(self):
+        output = "select {} in {};do;{};done".format(self.variable, self.map_list, self.body)
+        return output
+
+    def json(self):
+        json_output = make_kv(SelectNode.NodeName,
+                              [self.line_number,
+                               self.variable,
+                               self.body,
+                               self.map_list])
+        return json_output
+
+    def pretty(self):
+        var = self.variable
+        ml = self.map_list
+        b = self.body
+        return f'select {var} in {separated(string_of_arg, ml)}\ndo\n{b.pretty()}\ndone'
+
