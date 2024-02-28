@@ -1,6 +1,7 @@
 import abc
 from json import JSONEncoder
 from .print_lib import *
+from enum import Enum
 
 class AstNode(metaclass=abc.ABCMeta):
     NodeName = 'None'
@@ -105,7 +106,7 @@ class SubshellNode(Command):
     NodeName = 'Subshell'
     line_number: int
     body: Command
-    redir_list: list
+    redir_list: [list, None] # bash stores the redirects elsewhere
 
     def __init__(self, line_number, body, redir_list):
         self.line_number = line_number
@@ -206,7 +207,7 @@ class NotNode(Command):
 
 class RedirNode(Command):
     NodeName = 'Redir'
-    line_number: int
+    line_number: [int, None] # bash has no line number for redir nodes
     node: Command
     redir_list: list
 
@@ -647,11 +648,15 @@ class FileRedirNode(RedirectionNode):
     redir_type: str
     fd: int
     arg: "list[ArgChar]"
+    redirVarAssign: bool
+    redirVarAssignStr: str
 
-    def __init__(self, redir_type, fd, arg):
+    def __init__(self, redir_type, fd, arg, redirVarAssign=False, redirVarAssignStr=""):
         self.redir_type = redir_type
         self.fd = fd
         self.arg = arg
+        self.redirVarAssign = redirVarAssign
+        self.redirVarAssignStr = redirVarAssignStr
 
     # TODO: Implement
     # def __repr__(self):
@@ -661,23 +666,30 @@ class FileRedirNode(RedirectionNode):
         json_output = make_kv(FileRedirNode.NodeName,
                               [self.redir_type,
                                self.fd,
-                               self.arg])
+                               self.arg,
+                               self.redirVarAssign,
+                               self.redirVarAssignStr])
         return json_output
     
     def pretty(self):
         subtype = self.redir_type
         fd = self.fd
         a = self.arg
+        checkVarAssignOut = handle_redirvarassign(self.redirVarAssign, fd, self.redirVarAssignStr, 1)
+        checkVarAssignIn = handle_redirvarassign(self.redirVarAssign, fd, self.redirVarAssignStr, 0)
         if subtype == "To":
-            return show_unless(1, fd) + ">" + string_of_arg(a)
+            return checkVarAssignOut + ">" + string_of_arg(a)
         elif subtype == "Clobber":
-            return show_unless(1, fd) + ">|" + string_of_arg(a)
+            return checkVarAssignOut + ">|" + string_of_arg(a)
         elif subtype == "From":
-            return show_unless(0, fd) + "<" + string_of_arg(a)
+            return checkVarAssignIn + "<" + string_of_arg(a)
         elif subtype == "FromTo":
-            return show_unless(0, fd) + "<>" + string_of_arg(a)
+            return checkVarAssignIn + "<>" + string_of_arg(a)
         elif subtype == "Append":
-            return show_unless(1, fd) + ">>" + string_of_arg(a)
+            return checkVarAssignOut + ">>" + string_of_arg(a)
+        elif subtype == "ReadingString":
+            # bash specific
+            return checkVarAssignIn + "<<< " + string_of_arg(a)
         assert(False)
 
 
@@ -686,11 +698,29 @@ class DupRedirNode(RedirectionNode):
     dup_type: str
     fd: int
     arg: "list[ArgChar]"
+    hasFdRedirectee: bool
+    fdRedirectee: int
+    move: bool
+    redirVarAssign: bool
+    redirVarAssignStr: str
 
-    def __init__(self, dup_type, fd, arg):
+    def __init__(self,
+                 dup_type,
+                 fd,
+                 arg,
+                 hasFdRedirectee=False,
+                 fdRedirectee=0,
+                 move=False,
+                 redirVarAssign=False,
+                 redirVarAssignStr=""):
         self.dup_type = dup_type
         self.fd = fd
         self.arg = arg
+        self.hasFdRedirectee = hasFdRedirectee
+        self.fdRedirectee = fdRedirectee
+        self.move = move
+        self.redirVarAssign = redirVarAssign
+        self.redirVarAssignStr = redirVarAssignStr
 
     # TODO: Implement
     # def __repr__(self):
@@ -700,29 +730,51 @@ class DupRedirNode(RedirectionNode):
         json_output = make_kv(DupRedirNode.NodeName,
                               [self.dup_type,
                                self.fd,
-                               self.arg])
+                               self.arg,
+                               self.hasFdRedirectee,
+                               self.fdRedirectee,
+                               self.move,
+                               self.redirVarAssign,
+                               self.redirVarAssignStr])
         return json_output
     
     def pretty(self):
         subtype = self.dup_type
         fd = self.fd
         tgt = self.arg
-        if subtype == "ToFD":
-            return show_unless(1, fd) + ">&" + string_of_arg(tgt)
-        elif subtype == "FromFD":
-            return show_unless(0, fd) + "<&" + string_of_arg(tgt)
-        assert(False)
+        return_str = None
+        if not self.hasFdRedirectee:
+            if subtype == "ToFD":
+                return_str = handle_redirvarassign(self.redirVarAssign, fd, self.redirVarAssignStr, 1) + ">&" + string_of_arg(tgt)
+            elif subtype == "FromFD":
+                return_str = handle_redirvarassign(self.redirVarAssign, fd, self.redirVarAssignStr, 0) + "<&" + string_of_arg(tgt)
+        # this is bash specific
+        else:
+            if subtype == "ToFD":
+                return_str = handle_redirvarassign(self.redirVarAssign, fd, self.redirVarAssignStr, 1) + f">&{self.fdRedirectee}"
+            elif subtype == "FromFD":
+                return_str = handle_redirvarassign(self.redirVarAssign, fd, self.redirVarAssignStr, 0) + f"<&{self.fdRedirectee}"
+
+        if self.move:
+            return return_str + "-"
+        else:
+            return return_str
+
     
 class HeredocRedirNode(RedirectionNode):
     NodeName = "Heredoc"
     heredoc_type: str
     fd: int
     arg: "list[ArgChar]"
+    redirVarAssign: bool
+    redirVarAssignStr: str
 
-    def __init__(self, heredoc_type, fd, arg):
+    def __init__(self, heredoc_type, fd, arg, redirVarAssign=False, redirVarAssignStr=""):
         self.heredoc_type = heredoc_type
         self.fd = fd
         self.arg = arg
+        self.redirVarAssign = redirVarAssign
+        self.redirVarAssignStr = redirVarAssignStr
 
     # TODO: Implement
     # def __repr__(self):
@@ -732,7 +784,9 @@ class HeredocRedirNode(RedirectionNode):
         json_output = make_kv(HeredocRedirNode.NodeName,
                               [self.heredoc_type,
                                self.fd,
-                               self.arg])
+                               self.arg,
+                               self.redirVarAssign,
+                               self.redirVarAssignStr])
         return json_output
     
     def pretty(self):
@@ -742,7 +796,7 @@ class HeredocRedirNode(RedirectionNode):
         heredoc = string_of_arg(a, quote_mode=HEREDOC)
         marker = fresh_marker0(heredoc)
 
-        stri = show_unless(0, fd) + "<<"
+        stri = handle_redirvarassign(self.redirVarAssign, fd, self.redirVarAssignStr, 0) + "<<"
         if t == "XHere":
             stri += marker
         else:
@@ -860,5 +914,252 @@ class SelectNode(Command):
         var = self.variable
         ml = self.map_list
         b = self.body
-        return f'select {var} in {separated(string_of_arg, ml)}\ndo\n{b.pretty()}\ndone'
+        return f'select {var} in {separated(string_of_arg, ml)};\ndo\n{b.pretty()}\ndone'
+
+
+class ArithNode(Command):
+    NodeName = 'Arith'
+    line_number: int
+    body: "list[list[ArgChar]]"
+
+    def __init__(self, line_number, body):
+        self.line_number = line_number
+        self.body = body
+
+    def __repr__(self):
+        output = "Arith: {}".format(self.body)
+        return output
+
+    def json(self):
+        json_output = make_kv(ArithNode.NodeName,
+                              [self.line_number,
+                               self.body])
+        return json_output
+
+    def pretty(self):
+        return "$((" + string_of_arg(self.body) + "))"
+
+class CondType(Enum):
+    COND_AND = 1
+    COND_OR = 2
+    COND_UNARY = 3
+    COND_BINARY = 4
+    COND_TERM = 5
+    COND_EXPR = 6
+
+class CondNode(Command):
+    NodeName = 'Cond'
+    line_number: int
+    cond_type: CondType
+    op: [list[ArgChar], None]
+    left: [Command, None]
+    right: [Command, None]
+    invert_return: bool
+
+    def __init__(self, line_number, cond_type, op, left, right, invert_return):
+        self.line_number = line_number
+        self.cond_type = cond_type
+        self.op = op
+        self.left = left
+        self.right = right
+        self.invert_return = invert_return
+
+    def __repr__(self):
+        output = "Cond: type: {}".format(self.op)
+        output += ", op: {}".format(self.op)
+        output += ", left: {}".format(self.left)
+        output += ", right: {}".format(self.right)
+        output += ", invert_return: {}".format(self.invert_return)
+        return output
+
+    def json(self):
+        json_output = make_kv(CondNode.NodeName,
+                              [self.line_number,
+                               self.cond_type,
+                               self.op,
+                               self.left,
+                               self.right,
+                               self.invert_return])
+        return json_output
+
+    def pretty(self):
+        t = self.cond_type
+        o = self.op
+        l = self.left
+        r = self.right
+        result = "[[ "
+        if self.invert_return:
+            result += "! "
+        if t == CondType.COND_EXPR:
+            result += "( " + l.pretty() + " )"
+        elif t == CondType.COND_AND:
+            result += l.pretty() + " && " + r.pretty()
+        elif t == CondType.COND_OR:
+            result += l.pretty() + " || " + r.pretty()
+        elif t == CondType.COND_UNARY:
+            result += string_of_arg(o) + " " + l.pretty()
+        elif t == CondType.COND_BINARY:
+            result += l.pretty() + " " + string_of_arg(o) + " " + r.pretty()
+        elif t == CondType.COND_TERM:
+            result += l.pretty()
+        else:
+            raise ValueError("Invalid cond type")
+
+        result += " ]]"
+        return result
+
+
+class ArithForNode(Command):
+    NodeName = 'ArithFor'
+    line_number: int
+    init: "list[list[ArgChar]]"
+    cond: "list[list[ArgChar]]"
+    step: "list[list[ArgChar]]"
+    action: Command
+
+    def __init__(self, line_number, init, cond, step, action):
+        self.line_number = line_number
+        self.init = init
+        self.cond = cond
+        self.step = step
+        self.action = action
+
+    def __repr__(self):
+        output = "ArithFor: init: {}".format(self.init)
+        output += ", cond: {}".format(self.cond)
+        output += ", step: {}".format(self.step)
+        output += ", action: {}".format(self.action)
+        return output
+
+    def json(self):
+        json_output = make_kv(ArithForNode.NodeName,
+                              [self.line_number,
+                               self.init,
+                               self.cond,
+                               self.step,
+                               self.action])
+        return json_output
+
+    def pretty(self):
+        i = self.init
+        c = self.cond
+        s = self.step
+        a = self.action
+        return f'for (({string_of_arg(i)}; {string_of_arg(c)}; {string_of_arg(s)})); do {a.pretty()}; done'
+
+
+class CoprocNode(Command):
+    NodeName = 'Coproc'
+    name: list[ArgChar]
+    body: Command
+
+    def __init__(self, name, body):
+        self.name = name
+        self.body = body
+
+    def __repr__(self):
+        output = "Coproc: {}".format(self.name)
+        output += ", body: {}".format(self.body)
+        return output
+
+    def json(self):
+        json_output = make_kv(CoprocNode.NodeName,
+                              [self.line_number,
+                               self.name,
+                               self.body])
+        return json_output
+
+    def pretty(self):
+        n = self.name
+        b = self.body
+        return f'coproc {string_of_arg(n)} {b.pretty()}'
+
+class BashFlagNode(Command):
+    NodeName = 'BashFlag'
+    command_time_pipeline: bool
+    command_time_posix: bool
+    command_invert_return: bool
+    command: Command
+
+    def __init__(self, command_time_pipeline, command_time_posix, command_invert_return, command):
+        self.command_time_pipeline = command_time_pipeline
+        self.command_time_posix = command_time_posix
+        self.command_invert_return = command_invert_return
+        self.command = command
+
+    def __repr__(self):
+        output = "BashFlags:"
+        if self.command_time_pipeline:
+            output += " time_pipeline"
+        if self.command_time_posix:
+            output += " time_posix"
+        if self.command_invert_return:
+            output += " invert_return"
+        output += ", command: {}".format(self.command)
+        return output
+
+    def json(self):
+        json_output = make_kv(BashFlagNode.NodeName,
+                              [self.command_time_pipeline,
+                               self.command_time_posix,
+                               self.command_invert_return,
+                               self.command])
+        return json_output
+
+
+    def pretty(self):
+        output = ""
+        if self.command_time_pipeline:
+            output += "time "
+            if self.command_time_posix:
+                output += "-p "
+        if self.command_invert_return:
+            output += "! "
+
+        output += self.command.pretty()
+        return output
+
+
+class SingleArgRedirNode(RedirectionNode):
+    NodeName = "SingleArg"
+    redir_type: str
+    fd: [int, None]
+    arg: ["list[ArgChar]", None]
+    redirVarAssign: bool
+
+    def __init__(self, redir_type, fd, arg, redirVarAssign=False):
+        self.redir_type = redir_type
+        self.fd = fd
+        self.arg = arg
+        self.redirVarAssign = redirVarAssign
+
+    # TODO: Implement
+    # def __repr__(self):
+    #     return f''
+
+    def json(self):
+        json_output = make_kv(FileRedirNode.NodeName,
+                              [self.redir_type,
+                               self.fd,
+                               self.arg,
+                               self.redirVarAssign])
+        return json_output
+
+    def pretty(self):
+        subtype = self.redir_type
+        fd = self.fd
+        arg = string_of_arg(self.arg)
+        if subtype == "CloseThis":
+            return handle_redirvarassign(self.redirVarAssign, fd, arg) + ">&-"
+        elif subtype == "ErrAndOut":
+            return f"&> {arg}"
+        elif subtype == "AppendErrAndOut":
+            return f"&>> {arg}"
+
+
+def handle_redirvarassign(redir_varassign: bool, fd: [int, None], arg: [str, None], showFdUnless: [int, None]=None) -> str:
+    if redir_varassign:
+        return "{" + arg + "}"
+    else:
+        return show_unless(showFdUnless, fd) if showFdUnless else str(fd)
 
