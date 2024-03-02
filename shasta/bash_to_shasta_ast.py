@@ -63,13 +63,9 @@ def try_wrap_flags(node: AstNode, flags: list[CommandFlag]) -> AstNode:
     if CommandFlag.CMD_INVERT_RETURN in flags:
         node = NotNode(body=node)
 
-    if CommandFlag.CMD_INVERT_RETURN in flags or \
-       CommandFlag.CMD_TIME_POSIX in flags or \
-       CommandFlag.CMD_TIME_PIPELINE in flags:
-        return BashFlagNode(
-            command_invert_return=CommandFlag.CMD_INVERT_RETURN in flags,
+    if CommandFlag.CMD_TIME_PIPELINE in flags:
+        return TimeNode(
             command_time_posix=CommandFlag.CMD_TIME_POSIX in flags,
-            command_time_pipeline=CommandFlag.CMD_TIME_PIPELINE in flags,
             command=node
         )
     else:
