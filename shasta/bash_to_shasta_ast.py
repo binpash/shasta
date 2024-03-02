@@ -60,6 +60,9 @@ def try_wrap_redir(node: AstNode, redirs: list[Redirect]) -> AstNode:
 
 
 def try_wrap_flags(node: AstNode, flags: list[CommandFlag]) -> AstNode:
+    if CommandFlag.CMD_INVERT_RETURN in flags:
+        node = NotNode(body=node)
+
     if CommandFlag.CMD_INVERT_RETURN in flags or \
        CommandFlag.CMD_TIME_POSIX in flags or \
        CommandFlag.CMD_TIME_PIPELINE in flags:
@@ -114,12 +117,13 @@ def to_if_node(node: IfCom) -> IfNode:
 
 
 def to_assign_node(word: WordDesc) -> AssignNode:
+    # this is valid because bash variables can't have '=' in their names
     assigns = word.word.split(b'=', 1)
     assign_var = assigns[0]
     assign_val = assigns[1]
     return AssignNode(
         var=assign_var.decode('utf-8'),
-        val=to_arg_char_bytes(assign_val)
+        val=to_arg_char_bytes(assign_val, word.flags)
     )
 
 def to_command_node(node: SimpleCom) -> CommandNode:
@@ -192,7 +196,7 @@ def to_connection_node(node: Connection, redirs: list[Redirect]) -> Union[Backgr
             left_operand=to_ast_node(left),
             right_operand=to_ast_node(right))
     elif conn_type == ConnectionType.NEWLINE:
-        pass  # TODO - MICHAEL I can't figure out exactly what this is
+        raise ValueError("Newline connections are not implemented") # this seems to be unused
     else:
         raise ValueError("Invalid connection type")
 
@@ -278,17 +282,61 @@ def to_coproc_node(node: CoprocCom) -> CoprocNode:
     )
 
 
-def to_arg_char_bytes(word: bytes) -> list[ArgChar]:
-    # TODO
-    pass
+TILDE = b'~'
+ESC = b'\x01'
+BRACE_OPEN = b'{'
+BRACE_CLOSE = b'}'
+BRACKET_OPEN = b'['
+BRACKET_CLOSE = b']'
+SLASH = b'/'
+def to_arg_char_bytes(word: bytes, flags: list[WordDescFlag]) -> list[ArgChar]:
+    chars = split_utf8(word)
+    arg_chars = []
+    while i := 0 < len(chars):
+        char = chars[i]
+        if char == TILDE and WordDescFlag.W_NOTILDE not in flags:
+            num_chars = parse_tilde(chars[i+1:])
+            new_char = TArgChar(chars[i+1:i+1+num_chars])
+            arg_chars.extend(new_char)
+            i += num_chars + 1
+        else:
+            new_char = CArgChar(int.from_bytes(char, 'big'))
+            arg_chars.append(new_char)
+            i += 1
+
+def parse_tilde(word: list[bytes]) -> int:
+    return
+
+
+def split_utf8(word: bytes) -> list[bytes]:
+    split_bytes = []
+    i = 0
+    while i < len(word):
+        for j in range(1, 5):  # UTF-8 characters can be between 1 and 4 bytes long
+            try:
+                # Attempt to decode the next 1-4 bytes
+                char = word[i:i + j].decode('utf-8')
+                split_bytes.append(word[i:i + j])
+                i += j  # Move past the successfully decoded character
+                break
+            except UnicodeDecodeError:
+                if j == 4:  # If we've reached 4 bytes without success, it's an invalid sequence
+                    split_bytes.append(word[i:i + 1])
+                    i += 1  # Move past the invalid byte
+    return split_bytes
+
+
+
+
+
+
 
 def to_arg_char_string(word: str) -> list[ArgChar]:
-    # TODO
-    pass
+    return to_arg_char_bytes(word.encode('utf-8'), [])
 
 def to_arg_char(word: WordDesc) -> list[ArgChar]:
-    # TODO
-    pass
+    return to_arg_char_bytes(word.word, word.flags)
+
 
 
 def to_args(words: list[WordDesc]) -> list[list[ArgChar]]:
@@ -310,21 +358,23 @@ def to_redir(redir: Redirect) -> RedirectionNode:
     instruction = redir.instruction
     redirectee = redir.redirectee
     here_doc_eof = redir.here_doc_eof
+
+    the_fd = ('var', redirector.filename) if RedirectFlag.REDIR_VARASSIGN in rflags else ('fixed', redirector.dest)
+    arg_as_filename = to_arg_char(redirectee.filename)
+    arg_as_either = ('var', to_arg_char(redirectee.filename)) if redirectee.filename else ('fixed', redirectee.dest)
+
+
     if instruction == RInstruction.R_OUTPUT_DIRECTION:
         return FileRedirNode(
             redir_type="To",
-            fd=redirector.dest,
-            arg=to_arg_char(redirectee.filename),
-            redirVarAssign=RedirectFlag.REDIR_VARASSIGN in rflags,
-            redirVarAssignStr=redirector.filename if RedirectFlag.REDIR_VARASSIGN in rflags else None
+            fd=the_fd,
+            arg=arg_as_filename
         )
     elif instruction == RInstruction.R_INPUT_DIRECTION:
         return FileRedirNode(
             redir_type="From",
-            fd=redirector.dest,
-            arg=to_arg_char(redirectee.filename),
-            redirVarAssign=RedirectFlag.REDIR_VARASSIGN in rflags,
-            redirVarAssignStr=redirector.filename if RedirectFlag.REDIR_VARASSIGN in rflags else None
+            fd=the_fd,
+            arg=arg_as_filename,
         )
     elif instruction == RInstruction.R_INPUTA_DIRECTION:
         # this redirection is never created in parse.y in the bash source
@@ -332,152 +382,105 @@ def to_redir(redir: Redirect) -> RedirectionNode:
     elif instruction == RInstruction.R_APPENDING_TO:
         return FileRedirNode(
             redir_type="Append",
-            fd=redirector.dest,
-            arg=to_arg_char(redirectee.filename),
-            redirVarAssign=RedirectFlag.REDIR_VARASSIGN in rflags,
-            redirVarAssignStr=redirector.filename if RedirectFlag.REDIR_VARASSIGN in rflags else None
+            fd=the_fd,
+            arg=to_arg_char_string(here_doc_eof),
         )
     elif instruction == RInstruction.R_READING_UNTIL:
         return HeredocRedirNode(
             heredoc_type="Here",
-            fd=redirector.dest,
-            arg=to_arg_char_string(here_doc_eof),
-            redirVarAssign=RedirectFlag.REDIR_VARASSIGN in rflags,
-            redirVarAssignStr=redirector.filename if RedirectFlag.REDIR_VARASSIGN in rflags else None
+            fd=the_fd,
+            arg=arg_as_filename,
         )
     elif instruction == RInstruction.R_READING_STRING:
         return FileRedirNode(
             redir_type="ReadingString",
-            fd=redirector.dest,
-            arg=to_arg_char(redirectee.filename),
-            redirVarAssign=RedirectFlag.REDIR_VARASSIGN in rflags,
-            redirVarAssignStr=redirector.filename if RedirectFlag.REDIR_VARASSIGN in rflags else None
+            fd=the_fd,
+            arg=arg_as_filename,
         )
     elif instruction == RInstruction.R_DUPLICATING_INPUT:
         return DupRedirNode(
             dup_type="FromFD",
-            fd=redirector.dest,
-            arg=[], # unused
-            hasFdRedirectee=True,
-            fdRedirectee=redirectee.dest,
-            redirVarAssign=RedirectFlag.REDIR_VARASSIGN in rflags,
-            redirVarAssignStr=redirector.filename if RedirectFlag.REDIR_VARASSIGN in rflags else None
+            fd=the_fd,
+            arg=arg_as_either,
         )
     elif instruction == RInstruction.R_DUPLICATING_OUTPUT:
         return DupRedirNode(
             dup_type="ToFD",
-            fd=redirector.dest,
-            arg=[], # unused
-            hasFdRedirectee=True,
-            fdRedirectee=redirectee.dest,
-            redirVarAssign=RedirectFlag.REDIR_VARASSIGN in rflags,
-            redirVarAssignStr=redirector.filename if RedirectFlag.REDIR_VARASSIGN in rflags else None
+            fd=the_fd,
+            arg=arg_as_either,
         )
     elif instruction == RInstruction.R_DEBLANK_READING_UNTIL:
         return HeredocRedirNode(
             heredoc_type="XHere",
-            fd=redirector.dest,
+            fd=the_fd,
             arg=to_arg_char_string(here_doc_eof),
-            redirVarAssign=RedirectFlag.REDIR_VARASSIGN in rflags,
-            redirVarAssignStr=redirector.filename if RedirectFlag.REDIR_VARASSIGN in rflags else None
         )
     elif instruction == RInstruction.R_CLOSE_THIS:
-        if RedirectFlag.REDIR_VARASSIGN in rflags:
-            return SingleArgRedirNode(
-                redir_type="CloseThis",
-                fd=redirector.dest,
-                arg=None
-            )
-        else:
-            return SingleArgRedirNode(
-                redir_type="CloseThis",
-                fd=None,
-                arg=to_arg_char(redirector.filename),
-                redirVarAssign=True,
-            )
+        return SingleArgRedirNode(
+            redir_type="CloseThis",
+            fd=the_fd,
+        )
     elif instruction == RInstruction.R_ERR_AND_OUT:
         return SingleArgRedirNode(
             redir_type="ErrAndOut",
-            fd=None,
-            arg=to_arg_char(redirectee.filename)
+            fd=('var', redirectee.filename)
         )
     elif instruction == RInstruction.R_INPUT_OUTPUT:
         return FileRedirNode(
             redir_type="FromTo",
-            fd=redirector.dest,
-            arg=to_arg_char(redirectee.filename),
-            redirVarAssign=RedirectFlag.REDIR_VARASSIGN in rflags,
-            redirVarAssignStr=redirector.filename if RedirectFlag.REDIR_VARASSIGN in rflags else None
+            fd=the_fd,
+            arg=arg_as_filename,
         )
     elif instruction == RInstruction.R_OUTPUT_FORCE:
         return FileRedirNode(
             redir_type="Clobber",
-            fd=redirector.dest,
-            arg=to_arg_char(redirectee.filename),
-            redirVarAssign=RedirectFlag.REDIR_VARASSIGN in rflags,
-            redirVarAssignStr=redirector.filename if RedirectFlag.REDIR_VARASSIGN in rflags else None
+            fd=the_fd,
+            arg=arg_as_filename,
         )
     elif instruction == RInstruction.R_DUPLICATING_INPUT_WORD:
         return DupRedirNode(
             dup_type="FromFD",
-            fd=redirector.dest,
-            arg=to_arg_char(redirectee.filename),
-            redirVarAssign=RedirectFlag.REDIR_VARASSIGN in rflags,
-            redirVarAssignStr=redirector.filename if RedirectFlag.REDIR_VARASSIGN in rflags else None
+            fd=the_fd,
+            arg=arg_as_either,
         )
     elif instruction == RInstruction.R_DUPLICATING_OUTPUT_WORD:
         return DupRedirNode(
             dup_type="ToFD",
-            fd=redirector.dest,
-            arg=to_arg_char(redirectee.filename),
-            redirVarAssign=RedirectFlag.REDIR_VARASSIGN in rflags,
-            redirVarAssignStr=redirector.filename if RedirectFlag.REDIR_VARASSIGN in rflags else None
+            fd=the_fd,
+            arg=arg_as_either,
         )
     elif instruction == RInstruction.R_MOVE_INPUT:
         return DupRedirNode(
             dup_type="FromFD",
-            fd=redirector.dest,
-            arg=to_arg_char(redirectee.filename),
-            hasFdRedirectee=True,
-            fdRedirectee=redirectee.dest,
+            fd=the_fd,
+            arg=arg_as_either,
             move=True,
-            redirVarAssign=RedirectFlag.REDIR_VARASSIGN in rflags,
-            redirVarAssignStr=redirector.filename if RedirectFlag.REDIR_VARASSIGN in rflags else None
         )
     elif instruction == RInstruction.R_MOVE_OUTPUT:
         return DupRedirNode(
             dup_type="ToFD",
-            fd=redirector.dest,
-            arg=to_arg_char(redirectee.filename),
-            hasFdRedirectee=True,
-            fdRedirectee=redirectee.dest,
+            fd=the_fd,
+            arg=arg_as_either,
             move=True,
-            redirVarAssign=RedirectFlag.REDIR_VARASSIGN in rflags,
-            redirVarAssignStr=redirector.filename if RedirectFlag.REDIR_VARASSIGN in rflags else None
         )
     elif instruction == RInstruction.R_MOVE_INPUT_WORD:
         return DupRedirNode(
             dup_type="FromFD",
-            fd=redirector.dest,
-            arg=to_arg_char(redirectee.filename),
+            fd=the_fd,
+            arg=arg_as_either,
             move=True,
-            redirVarAssign=RedirectFlag.REDIR_VARASSIGN in rflags,
-            redirVarAssignStr=redirector.filename if RedirectFlag.REDIR_VARASSIGN in rflags else None
         )
     elif instruction == RInstruction.R_MOVE_OUTPUT_WORD:
         return DupRedirNode(
             dup_type="ToFD",
-            fd=redirector.dest,
-            arg=to_arg_char(redirectee.filename),
+            fd=the_fd,
+            arg=arg_as_either,
             move=True,
-            redirVarAssign=RedirectFlag.REDIR_VARASSIGN in rflags,
-            redirVarAssignStr=redirector.filename if RedirectFlag.REDIR_VARASSIGN in rflags else None
         )
     elif instruction == RInstruction.R_APPEND_ERR_AND_OUT:
         return SingleArgRedirNode(
             redir_type="AppendErrAndOut",
-            fd=None,
-            arg=to_arg_char(redirectee.filename)
+            fd=('var', redirectee.filename),
         )
     else:
         raise ValueError("Invalid redirection instruction")

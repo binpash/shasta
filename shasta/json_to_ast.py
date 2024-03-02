@@ -77,15 +77,15 @@ def to_redir(redir) -> RedirectionNode:
     k, v = redir
     if k == "File":
         return FileRedirNode(redir_type=v[0],
-                             fd=v[1],
+                             fd=('fixed', v[1]),
                              arg=to_arg(v[2]))
     elif k == "Dup":
         return DupRedirNode(dup_type=v[0],
-                            fd=v[1],
-                            arg=to_arg(v[2]))
+                            fd=('fixed', v[1]),
+                            arg=('var', v[2]))
     elif k == "Heredoc":
         return HeredocRedirNode(heredoc_type=v[0],
-                                fd=v[1],
+                                fd=('fixed', v[1]),
                                 arg=to_arg(v[2]))
     assert(False)
 
