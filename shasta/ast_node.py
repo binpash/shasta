@@ -88,7 +88,7 @@ class CommandNode(Command):
                                self.redir_list])
         return json_output
     
-    def pretty(self):
+    def pretty(self, ignore_heredocs=False):
         assigns = self.assignments
         cmds = self.arguments
         redirs = self.redir_list
@@ -98,7 +98,7 @@ class CommandNode(Command):
             pass
         else:
             str += " "
-        str += separated(string_of_arg, cmds) + string_of_redirs(redirs)
+        str += separated(string_of_arg, cmds) + string_of_redirs(redirs, ignore_heredocs=ignore_heredocs)
 
         return str
 
@@ -106,12 +106,12 @@ class SubshellNode(Command):
     NodeName = 'Subshell'
     line_number: int
     body: Command
-    redir_list: [list, None] # bash stores the redirects elsewhere
+    redir_list: list # bash stores the redirects elsewhere
 
     def __init__(self, line_number, body, redir_list):
         self.line_number = line_number
         self.body = body
-        self.redir_list = redir_list
+        self.redir_list = redir_list if redir_list else []
 
     def json(self):
         json_output = make_kv(SubshellNode.NodeName,
@@ -121,16 +121,21 @@ class SubshellNode(Command):
         return json_output
     
     def pretty(self):
-        return parens(self.body.pretty() + string_of_redirs(self.redir_list))
+        if self.body.NodeName == "Semi":
+            return f'({self.body.pretty(no_braces=True)})' + string_of_redirs(self.redir_list)
+        else:
+            return parens(self.body.pretty() + string_of_redirs(self.redir_list))
         
 class AndNode(Command):
     NodeName = 'And'
     left_operand: Command
     right_operand: Command
+    no_braces: bool
 
-    def __init__(self, left_operand, right_operand):
+    def __init__(self, left_operand, right_operand, no_braces=False):
         self.left_operand = left_operand
         self.right_operand = right_operand
+        self.no_braces = no_braces
 
     def __repr__(self):
         output = "{} && {}".format(self.left_operand, self.right_operand)
@@ -143,16 +148,36 @@ class AndNode(Command):
         return json_output
     
     def pretty(self):
-        return f'{braces(self.left_operand.pretty())} && {braces(self.right_operand.pretty())}'
+        deferred = None
+        if self.left_operand.NodeName == "Command" and \
+                len([1 for x in self.left_operand.redir_list if x.NodeName == "Heredoc"]) > 0:
+            deferred = get_deferred_heredocs(self.left_operand.redir_list)
+
+        if self.no_braces:
+            if deferred:
+                headers = ' '.join([x.header_pretty() for x in deferred])
+                bodies = ' '.join(reversed([x.body_pretty() for x in deferred]))
+                return f'{self.left_operand.pretty(ignore_heredocs=True)} {headers} &&\n{bodies}\
+                 {self.right_operand.pretty()}'
+            return f'{self.left_operand.pretty()} && {self.right_operand.pretty()}'
+        else:
+            if deferred:
+                headers = ' '.join([x.header_pretty() for x in deferred])
+                bodies = ' '.join(reversed([x.body_pretty() for x in deferred]))
+                return f'{braces(self.left_operand.pretty(ignore_heredocs=True))} {headers} &&\n{bodies}\
+                 {braces(self.right_operand.pretty())}'
+            return f'{braces(self.left_operand.pretty())} && {braces(self.right_operand.pretty())}'
 
 class OrNode(Command):
     NodeName = 'Or'
     left_operand: Command
     right_operand: Command
+    no_braces: bool
 
-    def __init__(self, left_operand, right_operand):
+    def __init__(self, left_operand, right_operand, no_braces=False):
         self.left_operand = left_operand
         self.right_operand = right_operand
+        self.no_braces = no_braces
 
     def __repr__(self):
         output = "{} || {}".format(self.left_operand, self.right_operand)
@@ -165,16 +190,21 @@ class OrNode(Command):
         return json_output
     
     def pretty(self):
-        return f'{braces(self.left_operand.pretty())} || {braces(self.right_operand.pretty())}'
+        if self.no_braces:
+            return f'{self.left_operand.pretty()} || {self.right_operand.pretty()}'
+        else:
+            return f'{braces(self.left_operand.pretty())} || {braces(self.right_operand.pretty())}'
     
 class SemiNode(Command):
     NodeName = 'Semi'
     left_operand: Command
     right_operand: Command
+    semicolon: bool
 
-    def __init__(self, left_operand, right_operand):
+    def __init__(self, left_operand, right_operand, semicolon=False):
         self.left_operand = left_operand
         self.right_operand = right_operand
+        self.semicolon = semicolon
 
     def __repr__(self):
         output = "{} ; {}".format(self.left_operand, self.right_operand)
@@ -186,16 +216,27 @@ class SemiNode(Command):
                                self.right_operand])
         return json_output
     
-    def pretty(self):
-        return f'{braces(self.left_operand.pretty())} \n {braces(self.right_operand.pretty())}'
+    def pretty(self, no_braces=False):
+        l = self.left_operand
+        r = self.right_operand
+        if not self.semicolon:
+            if no_braces:
+                return f'{l.pretty(no_braces=True) if l.NodeName == "Semi" else l.pretty()}\n\
+                {r.pretty(no_braces=True) if r.NodeName == "Semi" else r.pretty()}'
+            else:
+                return f'{braces(self.left_operand.pretty())}\n{braces(self.right_operand.pretty())}'
+        else:
+            return f'{self.left_operand.pretty()} ; {self.right_operand.pretty()}'
 
 
 class NotNode(Command):
     NodeName = 'Not'
     body: Command
+    no_braces: bool
 
-    def __init__(self, body):
+    def __init__(self, body, no_braces=False):
         self.body = body
+        self.no_braces = no_braces
 
     def json(self):
         json_output = make_kv(NotNode.NodeName,
@@ -203,7 +244,10 @@ class NotNode(Command):
         return json_output
     
     def pretty(self):
-        return f'! {braces(self.body.pretty())}'
+        if self.no_braces:
+            return f'! {self.body.pretty()}'
+        else:
+            return f'! {braces(self.body.pretty())}'
 
 class RedirNode(Command):
     NodeName = 'Redir'
@@ -230,12 +274,16 @@ class BackgroundNode(Command):
     NodeName = 'Background'
     line_number: [int, None]  # bash has no line number for background nodes
     node: Command
+    after_ampersand: Command # only used in bash
     redir_list: list
+    no_braces: bool
 
-    def __init__(self, line_number, node, redir_list):
+    def __init__(self, line_number, node, redir_list, after_ampersand=None, no_braces=False):
         self.line_number = line_number
         self.node = node
         self.redir_list = redir_list
+        self.after_ampersand = after_ampersand
+        self.no_braces = no_braces
 
     def json(self):
         json_output = make_kv(BackgroundNode.NodeName,
@@ -245,18 +293,32 @@ class BackgroundNode(Command):
         return json_output
 
     def pretty(self):
-        return background(self.node.pretty() + string_of_redirs(self.redir_list))
+        if not self.after_ampersand:
+            return background(self.node.pretty() + string_of_redirs(self.redir_list), self.no_braces)
+        else:
+            # we have to do some deferred heredocs stuff here
+            if self.after_ampersand.NodeName == "Background" and self.after_ampersand.after_ampersand:
+                return self.node.pretty() + string_of_redirs(self.redir_list) + " " + self.after_ampersand.pretty() \
+                    + " &"
+            elif self.after_ampersand.NodeName != "Background":
+                return self.node.pretty() + string_of_redirs(self.redir_list) + " " + " &" + \
+                    self.after_ampersand.pretty()
+            else:
+                return self.node.pretty() + string_of_redirs(self.redir_list) + " " + self.after_ampersand.pretty()
+
 
 class DefunNode(Command):
     NodeName = 'Defun'
     line_number: int
-    name: object
+    name: list["ArgChar"]
     body: Command
+    bash_mode: bool # this is necessary because bash allows function names with special characters
 
-    def __init__(self, line_number, name, body):
+    def __init__(self, line_number, name, body, bash_mode=False):
         self.line_number = line_number
         self.name = name
         self.body = body
+        self.bash_mode = bash_mode
 
     def json(self):
         json_output = make_kv(DefunNode.NodeName,
@@ -268,7 +330,14 @@ class DefunNode(Command):
     def pretty(self):
         name = self.name
         body = self.body
-        return name + "() {\n" + body.pretty() + "\n}"
+        if body.NodeName == "Group":
+            if self.bash_mode:
+                return "function " + string_of_arg(name) + " () {\n" + body.pretty(no_braces=True) + "\n}"
+            return string_of_arg(name) + " () {\n" + body.pretty(no_braces=True) + "\n}"
+        else:
+            if self.bash_mode:
+                return "function " + string_of_arg(name) + " () {\n" + body.pretty() + "\n}"
+            return string_of_arg(name) + " () {\n" + body.pretty() + "\n}"
 
 
 class ForNode(Command):
@@ -300,7 +369,8 @@ class ForNode(Command):
         a = self.argument
         body = self.body
         var = self.variable
-        return f'for {var} in {separated(string_of_arg, a)}; do {body.pretty()}; done'
+        return f'for {string_of_arg(var)} in {separated(string_of_arg, a)}; \n do \
+        {body.pretty(no_braces=True) if body.NodeName == "Semi" else body.pretty()}\ndone'
 
 class WhileNode(Command):
     NodeName = 'While'
@@ -323,16 +393,18 @@ class WhileNode(Command):
         
         if isinstance(first, NotNode):
             t = first.body
-            return f'until {t.pretty()}; do {b.pretty()}; done '
+            return f'until {t.pretty(no_braces=True) if t.NodeName == "Semi" else t.pretty()}; do \
+            {b.pretty(no_braces=True) if b.NodeName == "Semi" else b.pretty()}; done '
         else:
             t = first
-            return f'while {t.pretty()}; do {b.pretty()}; done '
+            return f'while {t.pretty(no_braces=True) if t.NodeName == "Semi" else t.pretty()}; do \
+            {b.pretty(no_braces=True) if b.NodeName == "Semi" else b.pretty()}; done '
 
 class IfNode(Command):
     NodeName = 'If'
     cond: Command
     then_b: Command
-    else_b: Command
+    else_b: [Command, None]
 
     def __init__(self, cond, then_b, else_b):
         self.cond = cond
@@ -350,14 +422,15 @@ class IfNode(Command):
         c = self.cond
         t = self.then_b
         e = self.else_b
-        str1 = f'if {c.pretty()}; then {t.pretty()}'
+        str1 = f'if {c.pretty(no_braces=True) if c.NodeName == "Semi" else c.pretty()}\
+        ; then {t.pretty(no_braces=True) if t.NodeName == "Semi" else t.pretty()}'
 
-        if is_empty_cmd(e):
+        if not e or is_empty_cmd(e):
             str1 += "; fi"
         elif isinstance(e, IfNode):
-            str1 += "; el" + e.pretty()
+            str1 += "; el" + (e.pretty(no_braces=True) if e.NodeName == "Semi" else e.pretty())
         else:
-            str1 += f'; else {e.pretty()}; fi'
+            str1 += f'; else {e.pretty(no_braces=True) if e.NodeName == "Semi" else e.pretty()}; fi'
 
         return str1
 
@@ -418,9 +491,11 @@ class CArgChar(ArgChar):
 class EArgChar(ArgChar):
     NodeName = 'E'
     char: int
+    internal: bool  # bash specific, specify that the character was escaped internally rather than by the user
 
-    def __init__(self, char: int):
+    def __init__(self, char: int, internal=False):
         self.char = char
+        self.internal = internal
 
     ## TODO: Implement
     def __repr__(self):
@@ -670,15 +745,15 @@ class FileRedirNode(RedirectionNode):
         checkVarAssignOut = handle_redirvarassign(self.fd, 1)
         checkVarAssignIn = handle_redirvarassign(self.fd, 0)
         if subtype == "To":
-            return checkVarAssignOut + ">" + string_of_arg(a)
+            return checkVarAssignOut + "> " + string_of_arg(a)
         elif subtype == "Clobber":
-            return checkVarAssignOut + ">|" + string_of_arg(a)
+            return checkVarAssignOut + ">| " + string_of_arg(a)
         elif subtype == "From":
-            return checkVarAssignIn + "<" + string_of_arg(a)
+            return checkVarAssignIn + "< " + string_of_arg(a)
         elif subtype == "FromTo":
-            return checkVarAssignIn + "<>" + string_of_arg(a)
+            return checkVarAssignIn + "<> " + string_of_arg(a)
         elif subtype == "Append":
-            return checkVarAssignOut + ">>" + string_of_arg(a)
+            return checkVarAssignOut + ">> " + string_of_arg(a)
         elif subtype == "ReadingString":
             # bash specific
             return checkVarAssignIn + "<<< " + string_of_arg(a)
@@ -719,15 +794,14 @@ class DupRedirNode(RedirectionNode):
         fd = self.fd
         tgt = self.arg
         return_str = None
-        if not tgt[0] == "fixed":
-            assert tgt[1].isinstance(str)
+        if tgt[0] == "var":
+            len(tgt[1]) # this acts as an assertion of sorts that this is a list of ArgChar
             if subtype == "ToFD":
                 return_str = handle_redirvarassign(self.fd, 1) + ">&" + string_of_arg(tgt[1])
             elif subtype == "FromFD":
                 return_str = handle_redirvarassign(self.fd, 0) + "<&" + string_of_arg(tgt[1])
         # this is bash specific
-        elif tgt[0] == "var":
-            assert tgt[1].isinstance(int)
+        elif tgt[0] == "fixed":
             if subtype == "ToFD":
                 return_str = handle_redirvarassign(self.fd, 1) + f">&{tgt[1]}"
             elif subtype == "FromFD":
@@ -744,13 +818,15 @@ class DupRedirNode(RedirectionNode):
 class HeredocRedirNode(RedirectionNode):
     NodeName = "Heredoc"
     heredoc_type: str
-    fd: (str, [list[ArgChar], int]) # either ('var', filename) or ('fixed', fd)
+    fd: (str, [list[ArgChar], int])  # either ('var', filename) or ('fixed', fd)
     arg: "list[ArgChar]"
+    kill_leading: bool
 
-    def __init__(self, heredoc_type, fd, arg):
+    def __init__(self, heredoc_type, fd, arg, kill_leading=False):
         self.heredoc_type = heredoc_type
         self.fd = fd
         self.arg = arg
+        self.kill_leading = kill_leading
 
     # TODO: Implement
     # def __repr__(self):
@@ -762,6 +838,29 @@ class HeredocRedirNode(RedirectionNode):
                                self.fd,
                                self.arg])
         return json_output
+
+
+    def header_pretty(self):
+        t = self.heredoc_type
+        fd = self.fd
+        a = self.arg
+        heredoc = string_of_arg(a, quote_mode=HEREDOC)
+        marker = fresh_marker0(heredoc)
+
+        stri = handle_redirvarassign(fd, 0) + "<<" + ("-" if self.kill_leading else "")
+        if t == "XHere":
+            stri += marker
+        else:
+            stri += "'" + marker + "'"
+
+        return stri
+
+    def body_pretty(self):
+        a = self.arg
+        heredoc = string_of_arg(a, quote_mode=HEREDOC)
+        marker = fresh_marker0(heredoc)
+
+        return heredoc + marker + "\n"
     
     def pretty(self):
         t = self.heredoc_type
@@ -770,7 +869,7 @@ class HeredocRedirNode(RedirectionNode):
         heredoc = string_of_arg(a, quote_mode=HEREDOC)
         marker = fresh_marker0(heredoc)
 
-        stri = handle_redirvarassign(fd, 0) + "<<"
+        stri = handle_redirvarassign(fd, 0) + "<<" + ("-" if self.kill_leading else "")
         if t == "XHere":
             stri += marker
         else:
@@ -836,8 +935,10 @@ def string_of_arg(args, quote_mode=UNQUOTED):
 
 def string_of_case(c):
     pats = map(string_of_arg, c["cpattern"])
+    body = c["cbody"].pretty() if c["cbody"] else ""
+    body = c["cbody"].pretty(no_braces=True) if (body and c["cbody"].NodeName == "Semi") else body
 
-    return f'{intercalate("|", pats)}) {c["cbody"].pretty()};;'
+    return f'{intercalate("|", pats)}) {body};;'
 
 
 def is_empty_cmd(e: Command):
@@ -862,7 +963,7 @@ def make_kv(key, val):
 class SelectNode(Command):
     NodeName = 'Select'
     line_number: int
-    variable: object
+    variable: list[ArgChar]
     body: Command
     map_list: list[list[ArgChar]]
 
@@ -888,7 +989,7 @@ class SelectNode(Command):
         var = self.variable
         ml = self.map_list
         b = self.body
-        return f'select {var} in {separated(string_of_arg, ml)};\ndo\n{b.pretty()}\ndone'
+        return f'select {string_of_arg(var)} in {separated(string_of_arg, ml)};\ndo\n{b.pretty()}\ndone'
 
 
 class ArithNode(Command):
@@ -911,7 +1012,7 @@ class ArithNode(Command):
         return json_output
 
     def pretty(self):
-        return "$((" + string_of_arg(self.body) + "))"
+        return "$((" + ' '.join([string_of_arg(x) for x in self.body]) + "))"
 
 class CondType(Enum):
     COND_AND = 1
@@ -956,30 +1057,30 @@ class CondNode(Command):
                                self.invert_return])
         return json_output
 
-    def pretty(self):
+    def pretty(self, with_brackets=True):
         t = self.cond_type
         o = self.op
         l = self.left
         r = self.right
-        result = "[[ "
+        result = "[[ " if with_brackets else ""
         if self.invert_return:
             result += "! "
-        if t == CondType.COND_EXPR:
-            result += "( " + l.pretty() + " )"
-        elif t == CondType.COND_AND:
-            result += l.pretty() + " && " + r.pretty()
-        elif t == CondType.COND_OR:
-            result += l.pretty() + " || " + r.pretty()
-        elif t == CondType.COND_UNARY:
-            result += string_of_arg(o) + " " + l.pretty()
-        elif t == CondType.COND_BINARY:
-            result += l.pretty() + " " + string_of_arg(o) + " " + r.pretty()
-        elif t == CondType.COND_TERM:
-            result += l.pretty()
+        if t == CondType.COND_EXPR.value:
+            result += "( " + l.pretty(with_brackets=False) + " )"
+        elif t == CondType.COND_AND.value:
+            result += l.pretty(with_brackets=False) + " && " + r.pretty(with_brackets=False)
+        elif t == CondType.COND_OR.value:
+            result += l.pretty(with_brackets=False) + " || " + r.pretty(with_brackets=False)
+        elif t == CondType.COND_UNARY.value:
+            result += string_of_arg(o) + " " + l.pretty(with_brackets=False)
+        elif t == CondType.COND_BINARY.value:
+            result += l.pretty(with_brackets=False) + " " + string_of_arg(o) + " " + r.pretty(with_brackets=False)
+        elif t == CondType.COND_TERM.value:
+            result += string_of_arg(o)
         else:
             raise ValueError("Invalid cond type")
 
-        result += " ]]"
+        result += (" ]]" if with_brackets else "")
         return result
 
 
@@ -1019,7 +1120,8 @@ class ArithForNode(Command):
         c = self.cond
         s = self.step
         a = self.action
-        return f'for (({string_of_arg(i)}; {string_of_arg(c)}; {string_of_arg(s)})); do {a.pretty()}; done'
+        return f'for (({separated(string_of_arg,i)}; {separated(string_of_arg,c)}; {separated(string_of_arg, s)})); \
+        do {a.pretty(no_braces=True) if a.NodeName == "Semi" else a.pretty()}; done'
 
 
 class CoprocNode(Command):
@@ -1038,8 +1140,7 @@ class CoprocNode(Command):
 
     def json(self):
         json_output = make_kv(CoprocNode.NodeName,
-                              [self.line_number,
-                               self.name,
+                              [self.name,
                                self.body])
         return json_output
 
@@ -1053,7 +1154,7 @@ class TimeNode(Command):
     time_posix: bool
     command: Command
 
-    def __init__(self, command_time_posix, command):
+    def __init__(self, time_posix, command):
         self.time_posix = time_posix
         self.command = command
 
@@ -1086,7 +1187,7 @@ class SingleArgRedirNode(RedirectionNode):
 
     def __init__(self, redir_type, fd):
         self.redir_type = redir_type
-        self.item = fd
+        self.fd = fd
 
     # TODO: Implement
     # def __repr__(self):
@@ -1105,15 +1206,81 @@ class SingleArgRedirNode(RedirectionNode):
             return handle_redirvarassign(item) + ">&-"
         elif subtype == "ErrAndOut":
             assert item[0] == 'var'
-            return f"&> {item[1]}"
+            return f"&> {string_of_arg(item[1])}"
         elif subtype == "AppendErrAndOut":
             assert item[0] == 'var'
-            return f"&>> {item[1]}"
+            return f"&>> {string_of_arg(item[1])}"
 
 
-def handle_redirvarassign(item: [int, str], showFdUnless: [int, None]=None) -> str:
+def handle_redirvarassign(item: (str, [int, list[ArgChar]]), showFdUnless: [int, None]=None) -> str:
     if item[0] == 'var':
-        return "{" + item[1] + "}"
+        return "{" + string_of_arg(item[1]) + "}"
     else:
         return show_unless(showFdUnless, item[1]) if showFdUnless else str(item[1])
 
+
+# brace expansion
+class BrArgChar(ArgChar):
+    NodeName = 'Br'
+    terms: list[list[ArgChar]]
+    prefix: list[ArgChar]
+    suffix: list[ArgChar]
+
+    def __init__(self, terms, prefix, suffix):
+        self.terms = terms
+        self.prefix = prefix
+        self.suffix = suffix
+
+    def __repr__(self):
+        return f'Br({self.terms}, {self.prefix}, {self.suffix})'
+
+    def format(self) -> str:
+        return f'Br({self.terms}, {self.prefix}, {self.suffix})'
+
+    def json(self):
+        json_output = make_kv(BrArgChar.NodeName,
+                              [self.terms,
+                              self.prefix,
+                              self.suffix])
+        return json_output
+
+    def pretty(self, quote_mode=UNQUOTED):
+        return (string_of_arg(self.prefix)
+                + '{'
+                + ','.join([string_of_arg(term) for term in self.terms])
+                + '}'
+                + string_of_arg(self.suffix))
+
+
+class GroupNode(AstNode):
+    NodeName = 'Group'
+    body: Command
+    redirections: list
+
+    def __init__(self, body):
+        self.body = body
+
+    def __repr__(self):
+        return f'Group({self.body})'
+
+    def json(self):
+        json_output = make_kv(GroupNode.NodeName,
+                              self.body)
+        return json_output
+
+    def pretty(self, no_braces=False):
+        deferred_heredocs = False
+        if self.body.NodeName == "Command":
+            deferred_heredocs = len(get_deferred_heredocs(self.body.redir_list)) > 0
+        if no_braces:
+            if self.body.NodeName == "Semi":
+                return self.body.pretty(no_braces=True)
+            else:
+                return self.body.pretty()
+        else:
+            if self.body.NodeName == "Semi":
+                return "{ " + self.body.pretty(no_braces=True) + "; }"
+            elif (self.body.NodeName == "Background" and not self.body.after_ampersand) or deferred_heredocs:
+                return "{ " + self.body.pretty() + " }"
+            else:
+                return "{ " + self.body.pretty() + "; }"

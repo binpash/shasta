@@ -41,16 +41,46 @@ def show_unless(expected, actual):
     else:
         return str(actual)
 
-def background(s):
-    return "{ " + s + " & }"
+def background(s, no_braces=False):
+    if no_braces:
+        return s + " &"
+    else:
+        return "{ " + s + " & }"
 
-def string_of_redirs(rs):
-    str = ""
+def get_deferred_heredocs(rs):
+    here_doc_redirs = []
 
     for redir in rs:
-        str = str + " " + redir.pretty()
+        if redir.NodeName == "Heredoc":
+            here_doc_redirs.append(redir)
 
-    return str
+    return here_doc_redirs
+
+def string_of_redirs(rs, bash_mode=True, ignore_heredocs=False):
+    if bash_mode:
+        str = ""
+        here_doc_redirs = []
+
+        for redir in rs:
+            if redir.NodeName == "Heredoc":
+                if not ignore_heredocs:
+                    str = str + " " + redir.header_pretty()
+                    here_doc_redirs.append(redir)
+            else:
+                str = str + " " + redir.pretty()
+
+        if not ignore_heredocs:
+            for redir in here_doc_redirs:
+                str = str + "\n" + redir.body_pretty()
+
+        return str
+    else:
+        str = ""
+
+        for redir in rs:
+            str = str + " " + redir.pretty()
+
+        return str
 
 def fresh_marker (heredoc):
     respectsFound = set();
