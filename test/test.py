@@ -21,61 +21,15 @@ def get_test_files() -> list[str]:
         if file.endswith(".sub") or file.endswith(".tests"):
             test_files.append(os.path.join(BASH_TESTS_DIR, file))
 
-    # remove these because they have SOH or are escaped by SOH, a known bug in bash-5.2
+    # this is the issue where esac is the case pattern, though we fixed it in our pretty printer,
+    # the issue is persistent when the case command is inside a comsub
     for remove_file in [
-        "case2.sub",
-        "nquote3.sub",
-        "dollar-star6.sub",
-        "nquote5.sub",
-        "exp6.sub",
-        "exp7.sub",
-        "quote4.sub",
-        "cond-regexp1.sub",
-        "iquote1.sub",
-        "exp1.sub",
-        "rhs-exp1.sub",
-        "cond-regexp3.sub",
-        "glob8.sub",
-        "posixexp6.sub",
-        "new-exp6.sub",
-        "dollar-at-star10.sub",
-        "dollar-at-star4.sub",
-        "case3.sub",
-        "read.tests",
-        "intl3.sub",
-        "array9.sub",
-        "unicode1.sub",
-        "unicode3.sub",
-        "nquote3.tests",
-        "nquote2.tests",
-        "more-exp.tests",
-        "posixpat.tests",
-        "mapfile.tests",
-        "iquote.tests",
-        "new-exp.tests",
-        "nquote5.tests",
-        "exp.tests",
-        "type.tests",
-        "nquote.tests",
-        "nquote1.tests",
-        "cond.tests",
-        "nquote4.tests",
-    ]:
-        test_files.remove(os.path.join(BASH_TESTS_DIR, remove_file))
-
-    for remove_file in [
-        "comsub-posix5.sub",  # bug report submitted, issue with printing esac in case commands
-        "case.tests",
-    ]:
-        test_files.remove(os.path.join(BASH_TESTS_DIR, remove_file))
-
-    for remove_file in [
-        "coproc.tests", # this is an issue with coproc pretty printing bad format, bug report submitted
+        "comsub-posix5.sub",
     ]:
         test_files.remove(os.path.join(BASH_TESTS_DIR, remove_file))
 
     # randomize the order of the test files
-    # random.shuffle(test_files)
+    random.shuffle(test_files)
 
     return test_files
 

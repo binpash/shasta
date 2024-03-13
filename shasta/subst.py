@@ -3,8 +3,8 @@ from libbash.bash_command import *
 from math import log
 
 
-CTLESC = '\x01' # octal 1
-CTLNUL = '\x7f' # octal 177
+CTLESC = int.from_bytes(b'\x01', byteorder='big') # octal 1
+CTLNUL = int.from_bytes(b'\x7f', byteorder='big') # octal 177
 NULL = 0
 
 OPEN_BRACE = int.from_bytes(b'{', byteorder='big')
@@ -38,6 +38,23 @@ def expand_word(word: list[int], flags: list[WordDescFlag]) -> list[ArgChar]:
     while True:
         if i >= len(word):
             break
+
+        c = word[i]
+
+        if c == CTLESC:
+            i += 1
+            new_string.append(CArgChar(utf8_to_unicode(word[i])))
+            i += 1
+        elif c == BACK_SLASH:
+            if (i + 1 < len(word) and word[i + 1] == CTLESC) and \
+                    (not (i + 2 < len(word) and word[i + 2] == CTLNUL) or (i + 2 >= len(word))):
+                new_string.append(CArgChar(utf8_to_unicode(word[i])))
+                i += 1
+                new_string.append(CArgChar(utf8_to_unicode(word[i])))
+                i += 1
+            else:
+                new_string.append(CArgChar(utf8_to_unicode(word[i])))
+                i += 1
         else:
             new_string.append(CArgChar(utf8_to_unicode(word[i])))
             i += 1

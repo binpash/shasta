@@ -51,6 +51,17 @@ class PipeNode(Command):
     def pretty(self):
         bg = self.is_background
         ps = self.items
+
+        deferred = None
+        if self.items[0].NodeName == "Command" and \
+                len([1 for x in self.items[0].redir_list if x.NodeName == "Heredoc"]) > 0:
+            deferred = get_deferred_heredocs(self.items[0].redir_list)
+
+        if deferred:
+            headers = ' '.join([x.header_pretty() for x in deferred])
+            bodies = ' '.join(reversed([x.body_pretty() for x in deferred]))
+            return f'{ps[0].pretty(ignore_heredocs=True)} {headers} |\
+             {intercalate(" | ", [item.pretty() for item in ps[1:]])}\n{bodies}'
         p = intercalate(" | ", [item.pretty() for item in ps])
 
         if bg:
@@ -938,7 +949,7 @@ def string_of_case(c):
     body = c["cbody"].pretty() if c["cbody"] else ""
     body = c["cbody"].pretty(no_braces=True) if (body and c["cbody"].NodeName == "Semi") else body
 
-    return f'{intercalate("|", pats)}) {body};;'
+    return f'{"(" if string_of_arg(c["cpattern"][0]) == "esac" else ""}{intercalate("|", pats)}) {body};;'
 
 
 def is_empty_cmd(e: Command):
@@ -1147,7 +1158,10 @@ class CoprocNode(Command):
     def pretty(self):
         n = self.name
         b = self.body
-        return f'coproc {string_of_arg(n)} {b.pretty()}'
+        if self.body.NodeName != "Command":
+            return f'coproc {string_of_arg(n)} {b.pretty()}'
+        else:
+            return f'coproc {b.pretty()}'
 
 class TimeNode(Command):
     NodeName = 'Time'
