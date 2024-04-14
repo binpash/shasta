@@ -133,7 +133,7 @@ class SubshellNode(Command):
     
     def pretty(self):
         if self.body.NodeName == "Semi":
-            return f'({self.body.pretty(no_braces=True)})' + string_of_redirs(self.redir_list)
+            return f'( {self.body.pretty(no_braces=True)} )' + string_of_redirs(self.redir_list)
         else:
             return parens(self.body.pretty() + string_of_redirs(self.redir_list))
         
@@ -356,7 +356,7 @@ class ForNode(Command):
     line_number: int
     argument: "list[list[ArgChar]]"
     body: Command
-    variable: object
+    variable: "list[ArgChar]"
 
     def __init__(self, line_number, argument, body, variable):
         self.line_number = line_number
