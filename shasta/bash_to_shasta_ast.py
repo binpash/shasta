@@ -138,9 +138,9 @@ def to_command_node(node: SimpleCom) -> CommandNode:
 
     assignments = []
     new_arguments = []
-    for word in arguments:
+    for i, word in enumerate(arguments):
         flags = word.flags
-        if WordDescFlag.W_ASSIGNMENT in flags:
+        if WordDescFlag.W_ASSIGNMENT in flags and i == 0:
             assignments.append(to_assign_node(word))
         else:
             new_arguments.append(to_arg_char(word))
