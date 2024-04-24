@@ -1023,7 +1023,7 @@ class ArithNode(Command):
         return json_output
 
     def pretty(self):
-        return "$((" + ' '.join([string_of_arg(x) for x in self.body]) + "))"
+        return "((" + ' '.join([string_of_arg(x) for x in self.body]) + "))"
 
 class CondType(Enum):
     COND_AND = 1
