@@ -832,12 +832,14 @@ class HeredocRedirNode(RedirectionNode):
     fd: (str, [list[ArgChar], int])  # either ('var', filename) or ('fixed', fd)
     arg: "list[ArgChar]"
     kill_leading: bool
+    eof: [str, None]
 
-    def __init__(self, heredoc_type, fd, arg, kill_leading=False):
+    def __init__(self, heredoc_type, fd, arg, kill_leading=False, eof=None):
         self.heredoc_type = heredoc_type
         self.fd = fd
         self.arg = arg
         self.kill_leading = kill_leading
+        self.eof = eof
 
     # TODO: Implement
     # def __repr__(self):
@@ -847,7 +849,8 @@ class HeredocRedirNode(RedirectionNode):
         json_output = make_kv(HeredocRedirNode.NodeName,
                               [self.heredoc_type,
                                self.fd,
-                               self.arg])
+                               self.arg,
+                               self.eof])
         return json_output
 
 
@@ -856,7 +859,7 @@ class HeredocRedirNode(RedirectionNode):
         fd = self.fd
         a = self.arg
         heredoc = string_of_arg(a, quote_mode=HEREDOC)
-        marker = fresh_marker0(heredoc)
+        marker = fresh_marker0(heredoc) if not self.eof else self.eof
 
         stri = handle_redirvarassign(fd, 0) + "<<" + ("-" if self.kill_leading else "")
         if t == "XHere":
@@ -869,7 +872,7 @@ class HeredocRedirNode(RedirectionNode):
     def body_pretty(self):
         a = self.arg
         heredoc = string_of_arg(a, quote_mode=HEREDOC)
-        marker = fresh_marker0(heredoc)
+        marker = fresh_marker0(heredoc) if not self.eof else self.eof
 
         return heredoc + marker + "\n"
     

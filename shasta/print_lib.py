@@ -71,7 +71,11 @@ def string_of_redirs(rs, bash_mode=True, ignore_heredocs=False):
 
         if not ignore_heredocs:
             for redir in here_doc_redirs:
-                str = str + "\n" + redir.body_pretty()
+                body_pretty = redir.body_pretty()
+                if str[-1] == "\n":
+                    str = str + body_pretty
+                else:
+                    str = str + "\n" + body_pretty
 
         return str
     else:

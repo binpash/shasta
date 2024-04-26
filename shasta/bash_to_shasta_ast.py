@@ -371,6 +371,7 @@ def to_redir(redir: Redirect) -> RedirectionNode:
             heredoc_type="Here" if WordDescFlag.W_QUOTED in redirectee.filename.flags else "XHere",
             fd=the_fd,
             arg=arg_as_filename,
+            eof=here_doc_eof,
         )
     elif instruction == RInstruction.R_READING_STRING:
         return FileRedirNode(
