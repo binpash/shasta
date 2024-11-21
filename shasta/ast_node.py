@@ -795,7 +795,8 @@ def string_of_arg(args, quote_mode=UNQUOTED):
     text = []
     while i < len(args):
         c = args[i].pretty(quote_mode=quote_mode)
-        if c == "$" and (i+1 < len(args)) and isinstance(args[i+1],EArgChar):
+        # escape dollar signs to avoid variable interpolation
+        if c == "$":
             c = "\\$"
         text.append(c)
 
