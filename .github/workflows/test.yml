@@ -1,0 +1,41 @@
+name: Test
+on: 
+  pull_request_target:
+    types: [assigned, opened, synchronize, reopened, ready_for_review]
+    paths: 
+        - libdash/**
+        - shasta/**
+  push:
+    branches:
+      - main
+      - future
+    paths: 
+      - libdash/**
+      - shasta/**
+jobs:
+  Shasta-Test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu 20.04
+    runs-on: ${{ matrix.os }}
+    if: github.event.pull_request.draft == false
+    steps:
+      - uses: actions/checkout@v2 
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Running Tests
+        run: |
+          sudo touch /.githubenv
+          (cd libdash; python setup.py install)
+          pip install .
+          (cd tests; make test)
+          timer=$(LANG=en_us_88591; date)
+          echo "VERSION<<EOF" >> $GITHUB_ENV
+          echo "OS:${{matrix.os}}" >> $GITHUB_ENV
+          echo "$timer" >> $GITHUB_ENV
+          # Parse the results and construct a github message post
+          # we append the data to the global env
+          cat results.log >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
