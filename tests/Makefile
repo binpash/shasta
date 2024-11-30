@@ -11,4 +11,4 @@ libdash_tests:
 	rm -rf libdash
 
 clean:
-	rm -f $(wildcard *.log)
+	rm -rf $(wildcard *.log) libdash_tests
