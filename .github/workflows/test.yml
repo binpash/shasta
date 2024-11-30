@@ -3,7 +3,6 @@ on:
   pull_request_target:
     types: [assigned, opened, synchronize, reopened, ready_for_review]
     paths: 
-        - libdash/**
         - shasta/**
   push:
     branches:
