@@ -26,8 +26,6 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Running Tests
         run: |
-          pip install .
-
           cd tests;
           make test
           test_succ=$?
