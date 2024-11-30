@@ -27,15 +27,17 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Running Tests
         run: |
-          sudo touch /.githubenv
-          (cd libdash; python setup.py install)
           pip install .
-          (cd tests; make test)
-          timer=$(LANG=en_us_88591; date)
-          echo "VERSION<<EOF" >> $GITHUB_ENV
-          echo "OS:${{matrix.os}}" >> $GITHUB_ENV
-          echo "$timer" >> $GITHUB_ENV
-          # Parse the results and construct a github message post
-          # we append the data to the global env
-          cat results.log >> $GITHUB_ENV
-          echo 'EOF' >> $GITHUB_ENV
+
+          cd tests;
+          make test
+          test_succ=$?
+
+          timer="$(LANG=en_us_88591; date)"
+          echo "VERSION<<EOF" >> "$GITHUB_ENV"
+          echo "OS:${{matrix.os}}" >> "$GITHUB_ENV"
+          echo "$timer" >> "$GITHUB_ENV"
+          cat python.log >> "$GITHUB_ENV"
+          echo 'EOF' >> "$GITHUB_ENV"
+
+          exit $test_succ
