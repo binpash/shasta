@@ -21,7 +21,7 @@ def intercalate(p, ss):
     return(str)
 
 def braces(s):
-    return "{ " + s + " ; }"
+    return "{ " + s + " ;"
 
 def parens(s):
     return f"( {s} )"
