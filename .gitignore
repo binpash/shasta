@@ -1,3 +1,5 @@
 *__pycache__*
 dist/*
 shasta.egg-info/*
+tests/libdash_tests/
+tests/*.log
