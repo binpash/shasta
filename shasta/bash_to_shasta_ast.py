@@ -1,4 +1,4 @@
-
+from shasta import ast_node
 from .ast_node import *
 from libbash.bash_command import *
 from .subst import expand_word
@@ -17,6 +17,7 @@ def to_ast_nodes(node_list: list[Command]) -> list[AstNode]:
 
 
 def to_ast_node(node: Command) -> AstNode:
+    ast_node.BASH_MODE = True
     node_type = node.type
 
     if node_type == CommandType.CM_FOR:
@@ -174,8 +175,7 @@ def to_function_def_node(node: Command) -> DefunNode:
     node = DefunNode(
         line_number=line_number,
         name=to_arg_char(name),
-        body=to_ast_node(body),
-        bash_mode=True)
+        body=to_ast_node(body))
     IN_FUNCTION = False
     return node
 

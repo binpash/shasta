@@ -3,6 +3,9 @@ from json import JSONEncoder
 from .print_lib import *
 from enum import Enum
 
+# semi-bad practice but avoids giving every node a bash_mode field
+BASH_MODE = False
+
 class AstNode(metaclass=abc.ABCMeta):
     NodeName = 'None'
 
@@ -323,13 +326,11 @@ class DefunNode(Command):
     line_number: int
     name: list["ArgChar"]
     body: Command
-    bash_mode: bool # this is necessary because bash allows function names with special characters
 
-    def __init__(self, line_number, name, body, bash_mode=False):
+    def __init__(self, line_number, name, body):
         self.line_number = line_number
         self.name = name
         self.body = body
-        self.bash_mode = bash_mode
 
     def json(self):
         json_output = make_kv(DefunNode.NodeName,
@@ -342,11 +343,11 @@ class DefunNode(Command):
         name = self.name
         body = self.body
         if body.NodeName == "Group":
-            if self.bash_mode:
+            if BASH_MODE:
                 return "function " + string_of_arg(name) + " () {\n" + body.pretty(no_braces=True) + "\n}"
             return string_of_arg(name) + " () {\n" + body.pretty(no_braces=True) + "\n}"
         else:
-            if self.bash_mode:
+            if BASH_MODE:
                 return "function " + string_of_arg(name) + " () {\n" + body.pretty() + "\n}"
             return string_of_arg(name) + " () {\n" + body.pretty() + "\n}"
 
