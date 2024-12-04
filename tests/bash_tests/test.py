@@ -1,14 +1,15 @@
+#!/usr/bin/env python3
+
 import sys
 
 from libbash import bash_to_ast
 import os
 import shutil
 import random
-from ..shasta.bash_to_shasta_ast import to_ast_nodes
+from shasta.bash_to_shasta_ast import to_ast_nodes
 
 # The file path to the bash-5.2/tests directory
-BASH_TESTS_DIR = os.path.join(os.path.dirname(os.path.dirname(
-    __file__)), "test_files")
+BASH_TESTS_DIR = os.path.join(os.path.dirname(__file__), "test_files")
 
 
 def get_test_files() -> list[str]:
@@ -169,6 +170,12 @@ def run_tests():
     Runs all the tests in this file
     """
     print("Running tests...")
-    test_bash_and_ast_consistency()
+    try:
+        test_bash_and_ast_consistency()
+    except AssertionError:
+        print("Test failed!")
+        sys.exit(1)
     print("All tests passed!")
 
+if __name__ == "__main__":
+    run_tests()

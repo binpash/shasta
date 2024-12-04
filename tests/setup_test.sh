@@ -6,4 +6,4 @@ if [ ! -d libdash_tests/ ]; then
   rm -rf libdash
 fi
 
-pip install .. libdash
+pip install .. libdash libbash
