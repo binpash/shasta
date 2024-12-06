@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 STRING_OF_VAR_TYPE_DICT = {
     "Normal"   : "",
     "Minus"    : "-",

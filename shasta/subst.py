@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from .ast_node import *
 from libbash.bash_command import *
 from math import log

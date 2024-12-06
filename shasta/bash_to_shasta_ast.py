@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from shasta import ast_node
 from .ast_node import *
 from libbash.bash_command import *

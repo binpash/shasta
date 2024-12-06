@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import abc
 from json import JSONEncoder
 from .print_lib import *
