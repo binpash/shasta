@@ -1,8 +1,25 @@
 from __future__ import annotations
 
+from typing import Union
+
 from shasta import ast_node
-from .ast_node import *
-from libbash.bash_command import *
+
+# bulk imports are annoying but necessary to keep linters happy
+# and disambiguate between classes with the same name
+
+from .ast_node import (
+    AstNode, AssignNode, CommandNode, DupRedirNode, SingleArgRedirNode, FileRedirNode, 
+    HeredocRedirNode, RedirNode, NotNode, TimeNode, RedirectionNode, ArgChar, CondNode, 
+    ArithForNode, ArithNode, SelectNode, SubshellNode, CoprocNode, CaseNode, WhileNode, 
+    IfNode, ForNode, GroupNode, DefunNode, BackgroundNode, SemiNode, PipeNode, AndNode, OrNode
+)
+
+from libbash.bash_command import (
+    Command, CommandType, Redirect, RInstruction, WordDescFlag, WordDesc, RedirectFlag, Pattern, 
+    SubshellCom, ArithCom, ArithForCom, CommandFlag, CoprocCom, CondCom, GroupCom, CaseCom, 
+    WhileCom, IfCom, ForCom, SimpleCom, SelectCom, Connection, ConnectionType
+)
+
 from .subst import expand_word
 
 IN_FUNCTION = False
@@ -174,12 +191,12 @@ def to_function_def_node(node: Command) -> DefunNode:
     body = node.value.function_def.command
     source_file = node.value.function_def.source_file  # MICHAEL - for printing purposes this seems unimportant
     IN_FUNCTION = True
-    node = DefunNode(
+    ast_node = DefunNode(
         line_number=line_number,
         name=to_arg_char(name),
         body=to_ast_node(body))
     IN_FUNCTION = False
-    return node
+    return ast_node
 
 
 def to_connection_node(node: Connection, redirs: list[Redirect]) -> Union[BackgroundNode, SemiNode, PipeNode, AndNode, OrNode]:
@@ -227,8 +244,7 @@ def to_until_node(node: WhileCom) -> WhileNode:
 
 
 def to_group_node(node: GroupCom) -> GroupNode:
-    node = GroupNode(to_ast_node(node.command))
-    return node
+    return GroupNode(to_ast_node(node.command))
 
 def to_arith_node(node: ArithCom) -> ArithNode:
     exp = node.exp
