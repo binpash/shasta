@@ -22,6 +22,12 @@ class AstNode(metaclass=abc.ABCMeta):
         """
         return
 
+class BashNode:
+    """
+        Dummy class to mark whether an AstNode is only for Bash
+    """
+    pass
+
 class Command(AstNode):
     pass
 
@@ -977,7 +983,7 @@ def make_kv(key, val):
 
 ##### BASH SPECIFIC NODES #####
 
-class SelectNode(Command):
+class SelectNode(Command, BashNode):
     NodeName = 'Select'
     line_number: int
     variable: list[ArgChar]
@@ -1009,7 +1015,7 @@ class SelectNode(Command):
         return f'select {string_of_arg(var)} in {separated(string_of_arg, ml)};\ndo\n{b.pretty()}\ndone'
 
 
-class ArithNode(Command):
+class ArithNode(Command, BashNode):
     NodeName = 'Arith'
     line_number: int
     body: "list[list[ArgChar]]"
@@ -1039,7 +1045,7 @@ class CondType(Enum):
     COND_TERM = 5
     COND_EXPR = 6
 
-class CondNode(Command):
+class CondNode(Command, BashNode):
     NodeName = 'Cond'
     line_number: int
     cond_type: CondType
@@ -1101,7 +1107,7 @@ class CondNode(Command):
         return result
 
 
-class ArithForNode(Command):
+class ArithForNode(Command, BashNode):
     NodeName = 'ArithFor'
     line_number: int
     init: "list[list[ArgChar]]"
@@ -1141,7 +1147,7 @@ class ArithForNode(Command):
         do {a.pretty(no_braces=True) if a.NodeName == "Semi" else a.pretty()}; done'
 
 
-class CoprocNode(Command):
+class CoprocNode(Command, BashNode):
     NodeName = 'Coproc'
     name: list[ArgChar]
     body: Command
@@ -1169,7 +1175,7 @@ class CoprocNode(Command):
         else:
             return f'coproc {b.pretty()}'
 
-class TimeNode(Command):
+class TimeNode(Command, BashNode):
     NodeName = 'Time'
     time_posix: bool
     command: Command
@@ -1200,7 +1206,7 @@ class TimeNode(Command):
             return f'time {c.pretty()}'
 
 
-class SingleArgRedirNode(RedirectionNode):
+class SingleArgRedirNode(RedirectionNode, BashNode):
     NodeName = "SingleArg"
     redir_type: str
     fd: (str, [list[ArgChar], int]) # Either ('var', filename) or ('fixed', fd)
@@ -1272,7 +1278,7 @@ class BrArgChar(ArgChar):
                 + string_of_arg(self.suffix))
 
 
-class GroupNode(AstNode):
+class GroupNode(AstNode, BashNode):
     NodeName = 'Group'
     body: Command
     redirections: list
