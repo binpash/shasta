@@ -521,11 +521,11 @@ class CArgChar(ArgChar):
 class EArgChar(ArgChar):
     NodeName = 'E'
     char: int
-    internal: bool  # bash specific, specify that the character was escaped internally rather than by the user
+    # currently unused
+    # internal: bool  # bash specific, specify that the character was escaped internally rather than by the user
 
-    def __init__(self, char: int, internal=False):
+    def __init__(self, char: int):
         self.char = char
-        self.internal = internal
 
     ## TODO: Implement
     def __repr__(self):
@@ -1255,40 +1255,6 @@ def handle_redirvarassign(item: FdType, showFdUnless: int | None = None) -> str:
         return "{" + string_of_arg(item[1]) + "}"
     else:
         return show_unless(showFdUnless, item[1]) if showFdUnless else str(item[1])
-
-
-# brace expansion
-class BrArgChar(ArgChar):
-    NodeName = 'Br'
-    terms: list[list[ArgChar]]
-    prefix: list[ArgChar]
-    suffix: list[ArgChar]
-
-    def __init__(self, terms, prefix, suffix):
-        self.terms = terms
-        self.prefix = prefix
-        self.suffix = suffix
-
-    def __repr__(self):
-        return f'Br({self.terms}, {self.prefix}, {self.suffix})'
-
-    def format(self) -> str:
-        return f'Br({self.terms}, {self.prefix}, {self.suffix})'
-
-    def json(self):
-        json_output = make_kv(BrArgChar.NodeName,
-                              [self.terms,
-                              self.prefix,
-                              self.suffix])
-        return json_output
-
-    def pretty(self, quote_mode=UNQUOTED):
-        return (string_of_arg(self.prefix)
-                + '{'
-                + ','.join([string_of_arg(term) for term in self.terms])
-                + '}'
-                + string_of_arg(self.suffix))
-
 
 class GroupNode(AstNode, BashNode):
     NodeName = 'Group'
