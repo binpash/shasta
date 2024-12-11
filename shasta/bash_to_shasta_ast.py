@@ -8,30 +8,75 @@ from shasta import ast_node
 # and disambiguate between classes with the same name
 
 from .ast_node import (
-    AstNode, AssignNode, CommandNode, DupRedirNode, SingleArgRedirNode, FileRedirNode, 
-    HeredocRedirNode, RedirNode, NotNode, TimeNode, RedirectionNode, ArgChar, CondNode, 
-    ArithForNode, ArithNode, SelectNode, SubshellNode, CoprocNode, CaseNode, WhileNode, 
-    IfNode, ForNode, GroupNode, DefunNode, BackgroundNode, SemiNode, PipeNode, AndNode, OrNode
+    AstNode,
+    AssignNode,
+    CommandNode,
+    DupRedirNode,
+    SingleArgRedirNode,
+    FileRedirNode,
+    HeredocRedirNode,
+    RedirNode,
+    NotNode,
+    TimeNode,
+    RedirectionNode,
+    ArgChar,
+    CondNode,
+    ArithForNode,
+    ArithNode,
+    SelectNode,
+    SubshellNode,
+    CoprocNode,
+    CaseNode,
+    WhileNode,
+    IfNode,
+    ForNode,
+    GroupNode,
+    DefunNode,
+    BackgroundNode,
+    SemiNode,
+    PipeNode,
+    AndNode,
+    OrNode,
 )
 
 if TYPE_CHECKING:
     from libbash.bash_command import (
-        Command, CommandType, Redirect, WordDesc, Pattern, SubshellCom,
-        ArithCom, ArithForCom, CommandFlag, CoprocCom, CondCom, GroupCom,
-        CaseCom, WhileCom, IfCom, ForCom, SimpleCom, SelectCom, Connection
+        Command,
+        CommandType,
+        Redirect,
+        WordDesc,
+        Pattern,
+        SubshellCom,
+        ArithCom,
+        ArithForCom,
+        CommandFlag,
+        CoprocCom,
+        CondCom,
+        GroupCom,
+        CaseCom,
+        WhileCom,
+        IfCom,
+        ForCom,
+        SimpleCom,
+        SelectCom,
+        Connection,
     )
 
 from .flags import CommandFlag, CommandType, ConnectionType, RInstruction, WordDescFlag, RedirectFlag
+
 
 from .subst import expand_word
 
 IN_FUNCTION = False
 
+
 def is_empty_command(node: AstNode) -> bool:
-    return node.NodeName == "CommandNode" and \
-        len(node.arguments) == 0 and \
-        len(node.assignments) == 0 and \
-        (node.redir_list is None or len(node.redir_list) == 0)
+    return (
+        node.NodeName == "CommandNode"
+        and len(node.arguments) == 0
+        and len(node.assignments) == 0
+        and (node.redir_list is None or len(node.redir_list) == 0)
+    )
 
 
 def to_ast_nodes(node_list: list[Command]) -> list[AstNode]:
@@ -88,7 +133,7 @@ def try_wrap_redir(node: AstNode, redirs: list[Redirect]) -> AstNode:
         return RedirNode(
             line_number=None,  # MICHAEL - bash doesn't store line numbers here, assuming that doesn't really matter
             node=node,
-            redir_list=to_redirs(redirs)
+            redir_list=to_redirs(redirs),
         )
     else:
         return node
@@ -99,10 +144,7 @@ def try_wrap_flags(node: AstNode, flags: list[CommandFlag]) -> AstNode:
         node = NotNode(body=node, no_braces=True)
 
     if CommandFlag.CMD_TIME_PIPELINE in flags:
-        return TimeNode(
-            time_posix=CommandFlag.CMD_TIME_POSIX in flags,
-            command=node
-        )
+        return TimeNode(time_posix=CommandFlag.CMD_TIME_POSIX in flags, command=node)
     else:
         return node
 
@@ -116,7 +158,8 @@ def to_for_node(node: ForCom) -> ForNode:
         line_number=line_number,
         argument=to_args(map_list),
         body=to_ast_node(action),
-        variable=to_arg_char(variable))
+        variable=to_arg_char(variable),
+    )
 
 
 def to_case_node(node: CaseCom) -> CaseNode:
@@ -126,15 +169,14 @@ def to_case_node(node: CaseCom) -> CaseNode:
     return CaseNode(
         line_number=line_number,
         argument=to_arg_char(argument),
-        cases=to_case_list(cases))
+        cases=to_case_list(cases),
+    )
 
 
 def to_while_node(node: WhileCom) -> WhileNode:
     test = node.test
     body = node.action
-    return WhileNode(
-        test=to_ast_node(test),
-        body=to_ast_node(body))
+    return WhileNode(test=to_ast_node(test), body=to_ast_node(body))
 
 
 def to_if_node(node: IfCom) -> IfNode:
@@ -144,18 +186,19 @@ def to_if_node(node: IfCom) -> IfNode:
     return IfNode(
         cond=to_ast_node(cond),
         then_b=to_ast_node(then_b),
-        else_b=to_ast_node(else_b) if else_b else None)
+        else_b=to_ast_node(else_b) if else_b else None,
+    )
 
 
 def to_assign_node(word: WordDesc) -> AssignNode:
     # this is valid because bash variables can't have '=' in their names
-    assigns = word.word.split(b'=', 1)
+    assigns = word.word.split(b"=", 1)
     assign_var = assigns[0]
     assign_val = assigns[1]
     return AssignNode(
-        var=assign_var.decode('utf-8'),
-        val=to_arg_char_bytes(assign_val, word.flags)
+        var=assign_var.decode("utf-8"), val=to_arg_char_bytes(assign_val, word.flags)
     )
+
 
 def to_command_node(node: SimpleCom) -> CommandNode:
     line_number = node.line
@@ -175,7 +218,8 @@ def to_command_node(node: SimpleCom) -> CommandNode:
         line_number=line_number,
         assignments=assignments,
         arguments=new_arguments,
-        redir_list=to_redirs(redirs))
+        redir_list=to_redirs(redirs),
+    )
 
 
 def to_select_node(node: SelectCom) -> SelectNode:
@@ -187,7 +231,8 @@ def to_select_node(node: SelectCom) -> SelectNode:
         line_number=line_number,
         body=to_ast_node(action),
         variable=to_arg_char(variable),
-        map_list=to_args(map_list))
+        map_list=to_args(map_list),
+    )
 
 
 def to_function_def_node(node: Command) -> DefunNode:
@@ -195,17 +240,20 @@ def to_function_def_node(node: Command) -> DefunNode:
     line_number = node.value.function_def.line
     name = node.value.function_def.name
     body = node.value.function_def.command
-    source_file = node.value.function_def.source_file  # MICHAEL - for printing purposes this seems unimportant
+    source_file = (
+        node.value.function_def.source_file
+    )  # MICHAEL - for printing purposes this seems unimportant
     IN_FUNCTION = True
     ast_node = DefunNode(
-        line_number=line_number,
-        name=to_arg_char(name),
-        body=to_ast_node(body))
+        line_number=line_number, name=to_arg_char(name), body=to_ast_node(body)
+    )
     IN_FUNCTION = False
     return ast_node
 
 
-def to_connection_node(node: Connection, redirs: list[Redirect]) -> Union[BackgroundNode, SemiNode, PipeNode, AndNode, OrNode]:
+def to_connection_node(
+    node: Connection, redirs: list[Redirect]
+) -> Union[BackgroundNode, SemiNode, PipeNode, AndNode, OrNode]:
     conn_type = node.connector
     left = node.first
     right = node.second
@@ -215,50 +263,60 @@ def to_connection_node(node: Connection, redirs: list[Redirect]) -> Union[Backgr
             node=to_ast_node(left),
             redir_list=to_redirs(redirs),
             after_ampersand=to_ast_node(right) if right else None,
-            no_braces=True)
+            no_braces=True,
+        )
     elif conn_type == ConnectionType.SEMICOLON:
         return SemiNode(
             left_operand=to_ast_node(left),
             right_operand=to_ast_node(right),
-            semicolon=not IN_FUNCTION)  # getting a little C-like here with global variables :(
+            semicolon=not IN_FUNCTION,
+        )  # getting a little C-like here with global variables :(
     elif conn_type == ConnectionType.PIPE:
         return PipeNode(
             is_background=False,  # MICHAEL - bash just wraps the pipe in a background node if it's a background pipe
-            items=[to_ast_node(left)] if right is None else [to_ast_node(left), to_ast_node(right)])  # MICHAEL - is it fine to not unwrap
+            items=(
+                [to_ast_node(left)]
+                if right is None
+                else [to_ast_node(left), to_ast_node(right)]
+            ),
+        )  # MICHAEL - is it fine to not unwrap
     elif conn_type == ConnectionType.AND_AND:
         return AndNode(
             left_operand=to_ast_node(left),
             right_operand=to_ast_node(right),
-            no_braces=True)
+            no_braces=True,
+        )
     elif conn_type == ConnectionType.OR_OR:
         return OrNode(
             left_operand=to_ast_node(left),
             right_operand=to_ast_node(right),
-            no_braces=True)
+            no_braces=True,
+        )
     elif conn_type == ConnectionType.NEWLINE:
-        raise ValueError("Newline connections are not implemented") # this seems to be unused
+        raise ValueError(
+            "Newline connections are not implemented"
+        )  # this seems to be unused
     else:
         raise ValueError("Invalid connection type")
+
 
 def to_until_node(node: WhileCom) -> WhileNode:
     test = node.test
     body = node.action
     return WhileNode(
-        test=NotNode(to_ast_node(test)), # not node make it an until
-        body=to_ast_node(body))
-
+        test=NotNode(to_ast_node(test)),  # not node make it an until
+        body=to_ast_node(body),
+    )
 
 
 def to_group_node(node: GroupCom) -> GroupNode:
     return GroupNode(to_ast_node(node.command))
 
+
 def to_arith_node(node: ArithCom) -> ArithNode:
     exp = node.exp
     line = node.line
-    return ArithNode(
-        line_number=line,
-        body=to_args(exp)
-    )
+    return ArithNode(line_number=line, body=to_args(exp))
 
 
 def to_cond_node(node: CondCom) -> CondNode:
@@ -274,7 +332,7 @@ def to_cond_node(node: CondCom) -> CondNode:
         op=op,
         left=left,
         right=right,
-        invert_return=invert_return
+        invert_return=invert_return,
     )
 
 
@@ -290,9 +348,8 @@ def to_arith_for_node(node: ArithForCom) -> ArithForNode:
         init=to_args(init),
         cond=to_args(test),
         step=to_args(step),
-        action=to_ast_node(body)
+        action=to_ast_node(body),
     )
-
 
 
 def to_subshell_node(node: SubshellCom) -> SubshellNode:
@@ -301,21 +358,19 @@ def to_subshell_node(node: SubshellCom) -> SubshellNode:
     return SubshellNode(
         line_number=line,
         body=to_ast_node(body),
-        redir_list=None  # MICHAEL - bash doesn't store redirections here
+        redir_list=None,  # MICHAEL - bash doesn't store redirections here
     )
+
 
 def to_coproc_node(node: CoprocCom) -> CoprocNode:
     name = node.name
     action = node.command
-    return CoprocNode(
-        name=to_arg_char_string(name),
-        body=to_ast_node(action)
-    )
+    return CoprocNode(name=to_arg_char_string(name), body=to_ast_node(action))
 
 
 def to_arg_char_bytes(word: bytes, flags: list[WordDescFlag]) -> list[ArgChar]:
     chars = split_utf8(word)
-    c_arg_chars = [int.from_bytes(c, byteorder='big') for c in chars]
+    c_arg_chars = [int.from_bytes(c, byteorder="big") for c in chars]
     return expand_word(c_arg_chars, flags)
 
 
@@ -326,19 +381,22 @@ def split_utf8(word: bytes) -> list[bytes]:
         for j in range(1, 5):  # UTF-8 characters can be between 1 and 4 bytes long
             try:
                 # Attempt to decode the next 1-4 bytes
-                char = word[i:i + j].decode('utf-8')
-                split_bytes.append(word[i:i + j])
+                char = word[i : i + j].decode("utf-8")
+                split_bytes.append(word[i : i + j])
                 i += j  # Move past the successfully decoded character
                 break
             except UnicodeDecodeError:
-                if j == 4:  # If we've reached 4 bytes without success, it's an invalid sequence
-                    split_bytes.append(word[i:i + 1])
+                if (
+                    j == 4
+                ):  # If we've reached 4 bytes without success, it's an invalid sequence
+                    split_bytes.append(word[i : i + 1])
                     i += 1  # Move past the invalid byte
     return split_bytes
 
 
 def to_arg_char_string(word: str) -> list[ArgChar]:
-    return to_arg_char_bytes(word.encode('utf-8'), [])
+    return to_arg_char_bytes(word.encode("utf-8"), [])
+
 
 def to_arg_char(word: WordDesc) -> list[ArgChar]:
     return to_arg_char_bytes(word.word, word.flags)
@@ -347,15 +405,20 @@ def to_arg_char(word: WordDesc) -> list[ArgChar]:
 def to_args(words: list[WordDesc]) -> list[list[ArgChar]]:
     return [to_arg_char(word) for word in words]
 
+
 def to_case_list(cases: list[Pattern]) -> list[dict]:
     return [
-        {'cpattern': to_args(case.patterns),
-         'cbody': to_ast_node(case.action) if case.action else None}
+        {
+            "cpattern": to_args(case.patterns),
+            "cbody": to_ast_node(case.action) if case.action else None,
+        }
         for case in cases
     ]
 
+
 def to_redirs(redirs: list[Redirect]) -> list[RedirectionNode]:
     return [to_redir(redir) for redir in redirs]
+
 
 def to_redir(redir: Redirect) -> RedirectionNode:
     redirector = redir.redirector
@@ -364,17 +427,20 @@ def to_redir(redir: Redirect) -> RedirectionNode:
     redirectee = redir.redirectee
     here_doc_eof = redir.here_doc_eof
 
-    the_fd = ('var', to_arg_char(redirector.filename)) if RedirectFlag.REDIR_VARASSIGN in rflags else ('fixed', redirector.dest)
+    the_fd = (
+        ("var", to_arg_char(redirector.filename))
+        if RedirectFlag.REDIR_VARASSIGN in rflags
+        else ("fixed", redirector.dest)
+    )
     arg_as_filename = to_arg_char(redirectee.filename) if redirectee.filename else None
-    arg_as_either = ('var', to_arg_char(redirectee.filename)) if redirectee.filename else ('fixed', redirectee.dest)
-
+    arg_as_either = (
+        ("var", to_arg_char(redirectee.filename))
+        if redirectee.filename
+        else ("fixed", redirectee.dest)
+    )
 
     if instruction == RInstruction.R_OUTPUT_DIRECTION:
-        return FileRedirNode(
-            redir_type="To",
-            fd=the_fd,
-            arg=arg_as_filename
-        )
+        return FileRedirNode(redir_type="To", fd=the_fd, arg=arg_as_filename)
     elif instruction == RInstruction.R_INPUT_DIRECTION:
         return FileRedirNode(
             redir_type="From",
@@ -392,7 +458,11 @@ def to_redir(redir: Redirect) -> RedirectionNode:
         )
     elif instruction == RInstruction.R_READING_UNTIL:
         return HeredocRedirNode(
-            heredoc_type="Here" if WordDescFlag.W_QUOTED in redirectee.filename.flags else "XHere",
+            heredoc_type=(
+                "Here"
+                if WordDescFlag.W_QUOTED in redirectee.filename.flags
+                else "XHere"
+            ),
             fd=the_fd,
             arg=arg_as_filename,
             eof=here_doc_eof,
@@ -417,7 +487,11 @@ def to_redir(redir: Redirect) -> RedirectionNode:
         )
     elif instruction == RInstruction.R_DEBLANK_READING_UNTIL:
         return HeredocRedirNode(
-            heredoc_type="Here" if WordDescFlag.W_QUOTED in redirectee.filename.flags else "XHere",
+            heredoc_type=(
+                "Here"
+                if WordDescFlag.W_QUOTED in redirectee.filename.flags
+                else "XHere"
+            ),
             fd=the_fd,
             arg=to_arg_char(redirectee.filename),
             kill_leading=True,
@@ -429,8 +503,7 @@ def to_redir(redir: Redirect) -> RedirectionNode:
         )
     elif instruction == RInstruction.R_ERR_AND_OUT:
         return SingleArgRedirNode(
-            redir_type="ErrAndOut",
-            fd=('var', to_arg_char(redirectee.filename))
+            redir_type="ErrAndOut", fd=("var", to_arg_char(redirectee.filename))
         )
     elif instruction == RInstruction.R_INPUT_OUTPUT:
         return FileRedirNode(
@@ -487,7 +560,7 @@ def to_redir(redir: Redirect) -> RedirectionNode:
     elif instruction == RInstruction.R_APPEND_ERR_AND_OUT:
         return SingleArgRedirNode(
             redir_type="AppendErrAndOut",
-            fd=('var', to_arg_char(redirectee.filename)),
+            fd=("var", to_arg_char(redirectee.filename)),
         )
     else:
         raise ValueError("Invalid redirection instruction")

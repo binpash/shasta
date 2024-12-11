@@ -8,6 +8,7 @@ from enum import IntEnum
 # Enums are IntEnums so they can be compared with libbash enums by their numeric value,
 # since libbash.AnyFlag.ANY != shasta.AnyFlag.ANY
 
+
 class OFlag(IntEnum):
     """
     represents open flags present in the OpenFlag class
