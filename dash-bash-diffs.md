@@ -3,7 +3,7 @@
 Shasta was designed for libdash, with libbash support added later.
 Both `json_to_ast` (for libdash) and `bash_to_shasta_ast` (for libbash) contain `to_ast_node(s)` functions,
 which each take a parsed, untyped AST and convert it to a shasta AST as defined in `ast_node`.
-Thr transformation is direct; bash is assumed to be a subset of dash. This is not strictly true, since
+Thr transformation is direct; bash is assumed to be a superset of dash. This is not strictly true, since
 both have some minor divergences from the POSIX spec, but is good enough.
 
 ### The following fields of `AstNodes` are only used for Bash scripts:
