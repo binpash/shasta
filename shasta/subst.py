@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from .ast_node import *
-from libbash.bash_command import *
 from math import log
-
+from .flags import WordDescFlag
 
 CTLESC = int.from_bytes(b'\x01', byteorder='big') # octal 1
 CTLNUL = int.from_bytes(b'\x7f', byteorder='big') # octal 177

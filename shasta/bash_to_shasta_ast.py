@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Union
+from typing import Union, TYPE_CHECKING
 
 from shasta import ast_node
 
@@ -14,11 +14,14 @@ from .ast_node import (
     IfNode, ForNode, GroupNode, DefunNode, BackgroundNode, SemiNode, PipeNode, AndNode, OrNode
 )
 
-from libbash.bash_command import (
-    Command, CommandType, Redirect, RInstruction, WordDescFlag, WordDesc, RedirectFlag, Pattern, 
-    SubshellCom, ArithCom, ArithForCom, CommandFlag, CoprocCom, CondCom, GroupCom, CaseCom, 
-    WhileCom, IfCom, ForCom, SimpleCom, SelectCom, Connection, ConnectionType
-)
+if TYPE_CHECKING:
+    from libbash.bash_command import (
+        Command, CommandType, Redirect, WordDesc, Pattern, SubshellCom,
+        ArithCom, ArithForCom, CommandFlag, CoprocCom, CondCom, GroupCom,
+        CaseCom, WhileCom, IfCom, ForCom, SimpleCom, SelectCom, Connection
+    )
+
+from .flags import CommandFlag, CommandType, ConnectionType, RInstruction, WordDescFlag, RedirectFlag
 
 from .subst import expand_word
 
@@ -39,6 +42,9 @@ def to_ast_node(node: Command) -> AstNode:
     ast_node.BASH_MODE = True
     node_type = node.type
 
+    # Enum equality is usually bad practice,
+    # but these aren't the same type (libbash enum vs shasta enum),
+    # so they have to be compared based upon their int values.
     if node_type == CommandType.CM_FOR:
         return_node = to_for_node(node.value.for_com)
     elif node_type == CommandType.CM_CASE:

@@ -14,7 +14,9 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX",
 ]
-dependencies = ["libbash"]
+
+[project.optional-dependencies]
+dev = ["libbash", "libdash"]
 
 [project.urls]
 "Homepage" = "https://github.com/binpash/shasta"
