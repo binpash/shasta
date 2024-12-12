@@ -962,8 +962,10 @@ def string_of_arg(args, quote_mode=UNQUOTED):
     while i < len(args):
         c = args[i].pretty(quote_mode=quote_mode)
         # escape dollar signs to avoid variable interpolation
-        if isinstance(c, CArgChar) and not c.bash_mode and c == "$" and i + 1 < len(args):
+        if isinstance(args[i], CArgChar) and not args[i].bash_mode and c == "$" and i + 1 < len(args):
             c = "\\$"
+        if c == "$" and not isinstance(args[i], CArgChar):
+            raise RuntimeError(f"{c}, {type(c)}")
         text.append(c)
 
         i = i+1
