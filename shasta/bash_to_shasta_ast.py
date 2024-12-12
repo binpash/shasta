@@ -376,13 +376,12 @@ def split_utf8(word: bytes) -> list[bytes]:
     i = 0
     while i < len(word):
         for j in range(1, 5):  # UTF-8 characters can be between 1 and 4 bytes long
-            try:
-                # Attempt to decode the next 1-4 bytes
-                char = word[i : i + j].decode("utf-8")
+            # Attempt to decode the next 1-4 bytes
+            if valid_utf8(word[i : i + j]):
                 split_bytes.append(word[i : i + j])
                 i += j  # Move past the successfully decoded character
                 break
-            except UnicodeDecodeError:
+            else:
                 if (
                     j == 4
                 ):  # If we've reached 4 bytes without success, it's an invalid sequence
@@ -390,7 +389,13 @@ def split_utf8(word: bytes) -> list[bytes]:
                     i += 1  # Move past the invalid byte
     return split_bytes
 
-
+def valid_utf8(str: bytes) -> bool:    
+    try:
+        str.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return True
+    
 def to_arg_char_string(word: str) -> list[ArgChar]:
     return to_arg_char_bytes(word.encode("utf-8"), [])
 
