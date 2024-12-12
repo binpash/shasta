@@ -7,9 +7,6 @@ from enum import Enum
 
 from typing import TYPE_CHECKING
 
-# semi-bad practice but avoids giving every node a bash_mode field
-BASH_MODE = False
-
 # Type hinting is only being used for documentation currently.
 # To use the type checker in a useful way, you'd have to
 # use isinstance instead of string tags for the AstNodes
@@ -344,11 +341,13 @@ class DefunNode(Command):
     line_number: int
     name: list["ArgChar"]
     body: Command
+    bash_mode: bool
 
-    def __init__(self, line_number, name, body):
+    def __init__(self, line_number, name, body, bash_mode=False):
         self.line_number = line_number
         self.name = name
         self.body = body
+        self.bash_mode = bash_mode
 
     def json(self):
         json_output = make_kv(DefunNode.NodeName,
@@ -361,11 +360,11 @@ class DefunNode(Command):
         name = self.name
         body = self.body
         if body.NodeName == "Group":
-            if BASH_MODE:
+            if self.bash_mode:
                 return "function " + string_of_arg(name) + " () {\n" + body.pretty(no_braces=True) + "\n}"
             return string_of_arg(name) + " () {\n" + body.pretty(no_braces=True) + "\n}"
         else:
-            if BASH_MODE:
+            if self.bash_mode:
                 return "function " + string_of_arg(name) + " () {\n" + body.pretty() + "\n}"
             return string_of_arg(name) + " () {\n" + body.pretty() + "\n}"
 
@@ -497,9 +496,15 @@ class ArgChar(AstNode):
 class CArgChar(ArgChar):
     NodeName = 'C'
     char: int
+    # Hack:
+    # We're using CArgChars to represent all bash characters in shasta
+    # because we haven't reimplemented the expansion code. This means that
+    # no CArgChars can be escaped in bash, since they could be special characters.
+    bash_mode: bool
 
-    def __init__(self, char: int):
+    def __init__(self, char: int, bash_mode: bool = False):
         self.char = char
+        self.bash_mode = bash_mode
 
     def __repr__(self):
         return self.format()
@@ -957,7 +962,7 @@ def string_of_arg(args, quote_mode=UNQUOTED):
     while i < len(args):
         c = args[i].pretty(quote_mode=quote_mode)
         # escape dollar signs to avoid variable interpolation
-        if not BASH_MODE and c == "$" and i + 1 < len(args):
+        if isinstance(c, CArgChar) and not c.bash_mode and c == "$" and i + 1 < len(args):
             c = "\\$"
         text.append(c)
 

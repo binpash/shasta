@@ -5,8 +5,6 @@ from .ast_node import *
 
 
 def to_ast_node(obj) -> AstNode:
-    ast_node.BASH_MODE = False
-
     k, v = obj
     if k == PipeNode.NodeName:
         node = PipeNode(is_background=v[0],

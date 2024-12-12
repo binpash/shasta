@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import Union, TYPE_CHECKING
 
-from shasta import ast_node
-
 # bulk imports are annoying but necessary to keep linters happy
 # and disambiguate between classes with the same name
 
@@ -84,7 +82,6 @@ def to_ast_nodes(node_list: list[Command]) -> list[AstNode]:
 
 
 def to_ast_node(node: Command) -> AstNode:
-    ast_node.BASH_MODE = True
     node_type = node.type
 
     # Enum equality is usually bad practice,
@@ -242,7 +239,7 @@ def to_function_def_node(node: Command) -> DefunNode:
     body = node.value.function_def.command
     IN_FUNCTION = True
     ast_node = DefunNode(
-        line_number=line_number, name=to_arg_char(name), body=to_ast_node(body)
+        line_number=line_number, name=to_arg_char(name), body=to_ast_node(body), bash_mode=True
     )
     IN_FUNCTION = False
     return ast_node

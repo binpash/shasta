@@ -46,22 +46,22 @@ def expand_word(word: list[int], flags: list[WordDescFlag]) -> list[ArgChar]:
 
         if c == CTLESC:
             i += 1
-            new_string.append(CArgChar(utf8_to_unicode(word[i])))
+            new_string.append(CArgChar(utf8_to_unicode(word[i]), bash_mode=True))
             i += 1
         elif c == BACK_SLASH:
             if (i + 1 < len(word) and word[i + 1] == CTLESC) and (
                 not (i + 2 < len(word) and word[i + 2] == CTLNUL)
                 or (i + 2 >= len(word))
             ):
-                new_string.append(CArgChar(utf8_to_unicode(word[i])))
+                new_string.append(CArgChar(utf8_to_unicode(word[i]), bash_mode=True))
                 i += 1
-                new_string.append(CArgChar(utf8_to_unicode(word[i])))
+                new_string.append(CArgChar(utf8_to_unicode(word[i]), bash_mode=True))
                 i += 1
             else:
-                new_string.append(CArgChar(utf8_to_unicode(word[i])))
+                new_string.append(CArgChar(utf8_to_unicode(word[i]), bash_mode=True))
                 i += 1
         else:
-            new_string.append(CArgChar(utf8_to_unicode(word[i])))
+            new_string.append(CArgChar(utf8_to_unicode(word[i]), bash_mode=True))
             i += 1
 
     return new_string

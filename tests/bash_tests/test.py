@@ -9,7 +9,6 @@ import os
 import shutil
 import random
 from shasta.bash_to_shasta_ast import to_ast_nodes
-from shasta.ast_node import BASH_MODE
 
 # The file path to the bash-5.2/tests directory
 BASH_TESTS_DIR = os.path.join(os.path.dirname(__file__), "test_files")
