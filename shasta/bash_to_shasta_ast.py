@@ -240,9 +240,6 @@ def to_function_def_node(node: Command) -> DefunNode:
     line_number = node.value.function_def.line
     name = node.value.function_def.name
     body = node.value.function_def.command
-    source_file = (
-        node.value.function_def.source_file
-    )  # MICHAEL - for printing purposes this seems unimportant
     IN_FUNCTION = True
     ast_node = DefunNode(
         line_number=line_number, name=to_arg_char(name), body=to_ast_node(body)

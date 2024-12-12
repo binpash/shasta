@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from .ast_node import *
+from .ast_node import ArgChar, CArgChar
+
 from math import log
 from .flags import WordDescFlag
 
@@ -77,6 +78,6 @@ def utf8_to_unicode(c: int) -> int:
     b = c.to_bytes(num_bytes, byteorder="big")
     try:
         s = b.decode("utf-8")
-        return ord(s)
-    except:
+    except UnicodeDecodeError:
         return c
+    return ord(s)
