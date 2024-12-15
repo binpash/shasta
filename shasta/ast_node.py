@@ -978,7 +978,7 @@ def string_of_case(c):
     pats = map(string_of_arg, c["cpattern"])
     body = c["cbody"].pretty() if c["cbody"] else ""
     body = c["cbody"].pretty(no_braces=True) if (body and c["cbody"].NodeName == "Semi") else body
-    delim = ";&" if c["fallthrough"] else ";;"
+    delim = ";&" if c.get("fallthrough") else ";;"
 
     return f'{"(" if string_of_arg(c["cpattern"][0]) == "esac" else ""}{intercalate("|", pats)}) {body}{delim}'
 
