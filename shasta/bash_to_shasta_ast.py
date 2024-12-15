@@ -60,7 +60,7 @@ if TYPE_CHECKING:
         Connection,
     )
 
-from .flags import CommandFlag, CommandType, ConnectionType, RInstruction, WordDescFlag, RedirectFlag
+from .flags import CommandFlag, CommandType, ConnectionType, PatternFlag, RInstruction, WordDescFlag, RedirectFlag
 
 
 from .subst import expand_word
@@ -410,6 +410,7 @@ def to_case_list(cases: list[Pattern]) -> list[dict]:
         {
             "cpattern": to_args(case.patterns),
             "cbody": to_ast_node(case.action) if case.action else None,
+            "fallthrough": PatternFlag.CASEPAT_FALLTHROUGH in case.flags
         }
         for case in cases
     ]
