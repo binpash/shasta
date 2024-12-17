@@ -1,6 +1,6 @@
 [project]
 name = "shasta"
-version = "0.1.0"
+version = "0.2.0"
 authors = [
   { name="Konstantinos Kallas", email="konstantinos.kallas@hotmail.com" },
 ]
@@ -14,6 +14,9 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX",
 ]
+
+[project.optional-dependencies]
+dev = ["libbash", "libdash"]
 
 [project.urls]
 "Homepage" = "https://github.com/binpash/shasta"

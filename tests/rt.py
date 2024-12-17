@@ -5,7 +5,6 @@ import sys
 import libdash
 from shasta.json_to_ast import to_ast_node
 
-
 sys.setrecursionlimit (9001)
 
 def print_asts(new_asts):

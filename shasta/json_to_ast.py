@@ -1,5 +1,8 @@
+from __future__ import annotations
 
-from shasta.ast_node import *
+from shasta import ast_node
+from .ast_node import *
+
 
 def to_ast_node(obj) -> AstNode:
     k, v = obj
@@ -36,13 +39,13 @@ def to_ast_node(obj) -> AstNode:
                               redir_list=to_redirs(v[2]))
     elif k == DefunNode.NodeName:
         node = DefunNode(line_number=v[0],
-                         name=v[1],
+                         name=to_arg_from_string(v[1]),
                          body=to_ast_node(v[2]))
     elif k == ForNode.NodeName:
         node = ForNode(line_number=v[0],
                        argument=to_args(v[1]),
                        body=to_ast_node(v[2]),
-                       variable=v[3])
+                       variable=to_arg_from_string(v[3]))
     elif k == WhileNode.NodeName:
         node = WhileNode(test=to_ast_node(v[0]),
                          body=to_ast_node(v[1]))
@@ -77,15 +80,15 @@ def to_redir(redir) -> RedirectionNode:
     k, v = redir
     if k == "File":
         return FileRedirNode(redir_type=v[0],
-                             fd=v[1],
+                             fd=('fixed', v[1]),
                              arg=to_arg(v[2]))
     elif k == "Dup":
         return DupRedirNode(dup_type=v[0],
-                            fd=v[1],
-                            arg=to_arg(v[2]))
+                            fd=('fixed', v[1]),
+                            arg=('var', to_arg(v[2])))
     elif k == "Heredoc":
         return HeredocRedirNode(heredoc_type=v[0],
-                                fd=v[1],
+                                fd=('fixed', v[1]),
                                 arg=to_arg(v[2]))
     assert(False)
 
@@ -97,6 +100,9 @@ def to_args(arg_list):
 def to_arg(arg_char_list):
     new_arg_char_list = [to_arg_char(arg_char) for arg_char in arg_char_list]
     return new_arg_char_list
+
+def to_arg_from_string(arg_string):
+    return [CArgChar(ord(c)) for c in arg_string]
 
 def to_arg_char(arg_char):
     k, v = arg_char
