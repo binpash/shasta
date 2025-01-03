@@ -726,7 +726,14 @@ class BArgChar(ArgChar):
     
     def pretty(self, quote_mode=UNQUOTED):
         param = self.node
-        return "$(" + param.pretty() + ")"
+        body = param.pretty()
+        # to handle $( () )
+        try:
+            if body[0] == "(" and body[-1] == ")":
+                body = f" {body} "
+        except IndexError:
+            pass
+        return "$(" + body + ")"
 
 class AssignNode(AstNode):
     var: str
