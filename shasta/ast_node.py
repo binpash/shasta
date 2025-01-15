@@ -1236,10 +1236,12 @@ class SingleArgRedirNode(RedirectionNode, BashNode):
     NodeName = "SingleArg"
     redir_type: str
     fd: FdType # Either ('var', filename) or ('fixed', fd)
+    arg: None
 
     def __init__(self, redir_type, fd):
         self.redir_type = redir_type
         self.fd = fd
+        self.arg = None
 
     # TODO: Implement
     # def __repr__(self):
@@ -1274,7 +1276,8 @@ def handle_redirvarassign(item: FdType, showFdUnless: int | None = None) -> str:
 class GroupNode(AstNode, BashNode):
     NodeName = 'Group'
     body: Command
-    redirections: list
+    # TODO: Support redirections
+    # redirections: list
 
     def __init__(self, body):
         self.body = body

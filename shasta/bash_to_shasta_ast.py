@@ -304,6 +304,8 @@ def to_until_node(node: WhileCom) -> WhileNode:
 
 
 def to_group_node(node: GroupCom) -> GroupNode:
+    # TODO: Support redirections
+    # Libbash doesn't store the redirs currently
     return GroupNode(to_ast_node(node.command))
 
 
