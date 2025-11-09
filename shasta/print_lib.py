@@ -31,7 +31,9 @@ def parens(s):
 def string_of_var_type(var_type):
     if var_type in STRING_OF_VAR_TYPE_DICT:
         return STRING_OF_VAR_TYPE_DICT[var_type]
-    exit(1)
+    # var_type must be one of the keys in STRING_OF_VAR_TYPE_DICT
+    # TODO: Add type annotation 
+    assert False 
 
 ## TODO: Fix this
 def separated(f, l):
