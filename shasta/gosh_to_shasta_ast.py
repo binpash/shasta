@@ -22,6 +22,7 @@ from .ast_node import (
     QArgChar,
     AArgChar,
     BArgChar,
+    PArgChar,
     VArgChar,
     PipeNode,
     AndNode,
@@ -548,7 +549,9 @@ def _word_part_to_arg_chars(part: dict[str, Any]) -> list[ArgChar]:
         expr = _arithm_expr_to_string(part.get("X"))
         return [AArgChar(_string_to_arg_chars(expr))]
     if part_type == "ProcSubst":
-        return _literal_word_part_chars(_proc_subst_to_string(part))
+        op = PROC_SUBST_OPS.get(part.get("Op"), "<(")
+        cmd = _stmts_to_command(part.get("Stmts", []))
+        return [PArgChar(op, cmd)]
     if part_type == "ExtGlob":
         return _literal_word_part_chars(_extglob_to_string(part))
     if part_type == "BraceExp":
@@ -565,6 +568,7 @@ def _arithm_expr_to_arg_list(expr: dict[str, Any] | None) -> list[list[ArgChar]]
     if not expr:
         return []
     return [_string_to_arg_chars(_arithm_expr_to_string(expr))]
+
 
 
 def _arithm_expr_to_string(expr: dict[str, Any]) -> str:
