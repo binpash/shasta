@@ -7,3 +7,6 @@ if [ ! -d libdash_tests/ ]; then
 fi
 
 pip install ..[dev]
+
+sudo apt-get update
+sudo apt-get install -y shfmt
