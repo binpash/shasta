@@ -123,6 +123,8 @@ def to_arg_char(arg_char):
         return QArgChar(to_arg(v))
     elif k == "B":
         return BArgChar(to_ast_node(v))
+    elif k == "P":
+        return PArgChar(v[0], to_ast_node(v[1]))
     assert(False)
 
 def to_case_list(case_list):
@@ -130,3 +132,4 @@ def to_case_list(case_list):
                       'cbody': to_ast_node(case['cbody'])} 
                      for case in case_list]
     return new_case_list
+

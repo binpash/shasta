@@ -735,6 +735,29 @@ class BArgChar(ArgChar):
             pass
         return "$(" + body + ")"
 
+
+class PArgChar(ArgChar, BashNode):
+    NodeName = "P"
+    op: str
+    node: Command
+
+    def __init__(self, op: str, node: Command):
+        self.op = op
+        self.node = node
+
+    def json(self):
+        json_output = make_kv(PArgChar.NodeName, [self.op, self.node])
+        return json_output
+
+    def pretty(self, quote_mode=UNQUOTED):
+        body = self.node.pretty()
+        try:
+            if body[0] == "(" and body[-1] == ")":
+                body = f" {body} "
+        except IndexError:
+            pass
+        return f"{self.op}{body})"
+
 class AssignNode(AstNode):
     var: str
     val: "list[ArgChar]"
