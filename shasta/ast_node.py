@@ -142,6 +142,12 @@ class SubshellNode(Command):
         self.body = body
         self.redir_list = redir_list if redir_list else []
 
+    def __repr__(self):
+        output = "Subshell: line {}, body: {}".format(self.line_number, self.body)
+        if len(self.redir_list) > 0:
+            output += ", reds[{}]".format(self.redir_list)
+        return output
+
     def json(self):
         json_output = make_kv(SubshellNode.NodeName,
                               [self.line_number,
@@ -267,6 +273,9 @@ class NotNode(Command):
         self.body = body
         self.no_braces = no_braces
 
+    def __repr__(self):
+        return "! {}".format(self.body)
+
     def json(self):
         json_output = make_kv(NotNode.NodeName,
                               self.body)
@@ -288,6 +297,12 @@ class RedirNode(Command):
         self.line_number = line_number
         self.node = node
         self.redir_list = redir_list
+
+    def __repr__(self):
+        output = "Redir: {}".format(self.node)
+        if len(self.redir_list) > 0:
+            output += ", reds[{}]".format(self.redir_list)
+        return output
 
     def json(self):
         json_output = make_kv(RedirNode.NodeName,
@@ -313,6 +328,14 @@ class BackgroundNode(Command):
         self.redir_list = redir_list
         self.after_ampersand = after_ampersand
         self.no_braces = no_braces
+
+    def __repr__(self):
+        output = "Background: {}".format(self.node)
+        if len(self.redir_list) > 0:
+            output += ", reds[{}]".format(self.redir_list)
+        if self.after_ampersand is not None:
+            output += ", after&: {}".format(self.after_ampersand)
+        return output
 
     def json(self):
         json_output = make_kv(BackgroundNode.NodeName,
@@ -348,6 +371,12 @@ class DefunNode(Command):
         self.name = name
         self.body = body
         self.bash_mode = bash_mode
+
+    def __repr__(self):
+        output = "Defun: {}, body: {}".format(self.name, self.body)
+        if self.bash_mode:
+            output += ", bash_mode"
+        return output
 
     def json(self):
         json_output = make_kv(DefunNode.NodeName,
@@ -410,6 +439,12 @@ class WhileNode(Command):
         self.test = test
         self.body = body
 
+    def __repr__(self):
+        if isinstance(self.test, NotNode):
+            return "Until: test: {}, do: {}".format(self.test.body, self.body)
+        else:
+            return "While: test: {}, do: {}".format(self.test, self.body)
+
     def json(self):
         json_output = make_kv(WhileNode.NodeName,
                               [self.test,
@@ -439,6 +474,12 @@ class IfNode(Command):
         self.cond = cond
         self.then_b = then_b
         self.else_b = else_b
+
+    def __repr__(self):
+        output = "If: {}, then: {}".format(self.cond, self.then_b)
+        if self.else_b is not None:
+            output += ", else: {}".format(self.else_b)
+        return output
 
     def json(self):
         json_output = make_kv(IfNode.NodeName,
@@ -473,6 +514,9 @@ class CaseNode(Command):
         self.line_number = line_number
         self.argument = argument
         self.cases = cases
+
+    def __repr__(self):
+        return "Case: {}, cases[{}]".format(self.argument, len(self.cases))
 
     def json(self):
         json_output = make_kv(CaseNode.NodeName,
@@ -583,9 +627,8 @@ class TArgChar(ArgChar):
     def __init__(self, string: str):
         self.string = string
 
-    ## TODO: Implement
-    # def __repr__(self):
-    #     return f''
+    def __repr__(self):
+        return "T({})".format(self.string)
 
     def json(self):
         json_output = make_kv(TArgChar.NodeName,
@@ -615,9 +658,8 @@ class AArgChar(ArgChar):
     def __init__(self, arg: "list[ArgChar]"):
         self.arg = arg
 
-    ## TODO: Implement
-    # def __repr__(self):
-    #     return f''
+    def __repr__(self):
+        return "A({})".format(self.arg)
 
     def json(self):
         json_output = make_kv(AArgChar.NodeName,
@@ -712,9 +754,8 @@ class BArgChar(ArgChar):
     def __init__(self, node: Command):
         self.node = node
 
-    ## TODO: Implement
-    # def __repr__(self):
-    #     return f''
+    def __repr__(self):
+        return "B({})".format(self.node)
 
     def format(self) -> str:
         return '$({})'.format(self.node)
@@ -744,6 +785,9 @@ class PArgChar(ArgChar, BashNode):
     def __init__(self, op: str, node: Command):
         self.op = op
         self.node = node
+
+    def __repr__(self):
+        return "P({}, {})".format(self.op, self.node)
 
     def json(self):
         json_output = make_kv(PArgChar.NodeName, [self.op, self.node])
@@ -794,9 +838,8 @@ class FileRedirNode(RedirectionNode):
         self.fd = fd
         self.arg = arg
 
-    # TODO: Implement
-    # def __repr__(self):
-    #     return f''
+    def __repr__(self):
+        return "FileRedir: {}, fd: {}, arg: {}".format(self.redir_type, self.fd, self.arg)
 
     def json(self):
         json_output = make_kv(FileRedirNode.NodeName,
@@ -843,9 +886,8 @@ class DupRedirNode(RedirectionNode):
         self.arg = arg
         self.move = move
 
-    # TODO: Implement
-    # def __repr__(self):
-    #     return f''
+    def __repr__(self):
+        return "DupRedir: {}, fd: {}, arg: {}, move: {}".format(self.dup_type, self.fd, self.arg, self.move)
 
     def json(self):
         json_output = make_kv(DupRedirNode.NodeName,
@@ -896,9 +938,8 @@ class HeredocRedirNode(RedirectionNode):
         self.kill_leading = kill_leading
         self.eof = eof
 
-    # TODO: Implement
-    # def __repr__(self):
-    #     return f''
+    def __repr__(self):
+        return "Heredoc: {}, fd: {}, kill_leading: {}".format(self.heredoc_type, self.fd, self.kill_leading)
 
     def json(self):
         json_output = make_kv(HeredocRedirNode.NodeName,
@@ -1112,7 +1153,7 @@ class CondNode(Command, BashNode):
         self.invert_return = invert_return
 
     def __repr__(self):
-        output = "Cond: type: {}".format(self.op)
+        output = "Cond: type: {}".format(self.cond_type)
         output += ", op: {}".format(self.op)
         output += ", left: {}".format(self.left)
         output += ", right: {}".format(self.right)
@@ -1266,9 +1307,8 @@ class SingleArgRedirNode(RedirectionNode, BashNode):
         self.fd = fd
         self.arg = None
 
-    # TODO: Implement
-    # def __repr__(self):
-    #     return f''
+    def __repr__(self):
+        return "SingleArgRedir: {}, fd: {}".format(self.redir_type, self.fd)
 
     def json(self):
         json_output = make_kv(FileRedirNode.NodeName,
