@@ -1,4 +1,4 @@
-.PHONY: test dash_test bash_test gosh_test clean
+.PHONY: test dash_test bash_test gosh_test tutorial_test clean
 
 dash_test:
 	@find libdash_tests/tests libdash_tests/pash_tests -type f | while read f; do libdash_tests/round_trip.sh ./rt.py "$$f"; done | tee python.log
@@ -14,7 +14,10 @@ gosh_test:
 	@cat python.log | egrep '^[A-Z0-9_]+:' | cut -d ':' -f 1 | sort | uniq -c
 	@grep ':' python.log && echo "FAILED" && exit 1 || exit 0
 
-test: dash_test bash_test gosh_test
+tutorial_test:
+	@pytest tutorial_tests/ -v | tee -a python.log
+
+test: dash_test bash_test gosh_test tutorial_test
 
 clean:
 	rm -rf $(wildcard *.log) libdash_tests

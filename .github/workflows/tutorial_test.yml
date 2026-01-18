@@ -1,0 +1,54 @@
+name: Tutorial Tests
+
+on:
+  pull_request:
+    types: [assigned, opened, synchronize, reopened, ready_for_review]
+    paths:
+      - shasta/**
+      - tests/tutorial_tests/**
+  push:
+    branches:
+      - main
+      - future
+    paths:
+      - shasta/**
+      - tests/tutorial_tests/**
+
+jobs:
+  tutorial-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    if: github.event.pull_request.draft == false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest mypy
+          pip install libdash@git+https://github.com/binpash/libdash
+          pip install -e .
+
+      - name: Run tutorial tests
+        run: |
+          pytest tests/tutorial_tests/ -v 2>&1 | tee tutorial_test.log
+          test_succ=$?
+
+          timer="$(LANG=en_us_88591; date)"
+          echo "VERSION<<EOF" >> "$GITHUB_ENV"
+          echo "OS:${{matrix.os}}" >> "$GITHUB_ENV"
+          echo "$timer" >> "$GITHUB_ENV"
+          cat tutorial_test.log >> "$GITHUB_ENV"
+          echo 'EOF' >> "$GITHUB_ENV"
+
+          exit $test_succ

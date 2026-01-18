@@ -12,8 +12,42 @@ from typing import TYPE_CHECKING
 # use isinstance instead of string tags for the AstNodes
 # (or an equivalent "is_type(*AstNode)" function).
 if TYPE_CHECKING:
-    from typing import ClassVar, Literal, TypeAlias
+    from typing import ClassVar, Literal, TypeAlias, TypedDict, NotRequired
+
     FdType: TypeAlias = tuple[Literal['var'], list["ArgChar"]] | tuple[Literal['fixed'], int]
+
+    # Variable substitution types from libdash VAR_TYPES
+    VarType: TypeAlias = Literal[
+        "Normal", "Minus", "Plus", "Question", "Assign",
+        "TrimR", "TrimRMax", "TrimL", "TrimLMax", "Length"
+    ]
+
+    # Tilde expansion: either "None" or ["Some", username]
+    TildeExpansion: TypeAlias = str | list
+
+    # File redirection types
+    FileRedirType: TypeAlias = Literal["To", "Clobber", "From", "FromTo", "Append", "ReadingString"]
+
+    # Dup redirection types
+    DupRedirType: TypeAlias = Literal["ToFD", "FromFD"]
+
+    # Heredoc types
+    HeredocType: TypeAlias = Literal["Here", "XHere"]
+
+    # Bash single arg redir types
+    SingleArgRedirType: TypeAlias = Literal["CloseThis", "ErrAndOut", "AppendErrAndOut"]
+
+    # Process substitution operators (Bash)
+    ProcessSubOp: TypeAlias = Literal["<(", ">("]
+
+    # Redirection node union
+    RedirectionNode: TypeAlias = "FileRedirNode | DupRedirNode | HeredocRedirNode | SingleArgRedirNode"
+
+    # Case item structure
+    class CaseItem(TypedDict):
+        cpattern: list[list["ArgChar"]]
+        cbody: "Command | None"
+        fallthrough: NotRequired[bool]
 
 class AstNode(metaclass=abc.ABCMeta):
     NodeName: ClassVar[str] = 'None'
@@ -91,9 +125,9 @@ class PipeNode(Command):
 class CommandNode(Command):
     NodeName = 'Command'
     line_number: int
-    assignments: list
+    assignments: "list[AssignNode]"
     arguments: "list[list[ArgChar]]"
-    redir_list: list
+    redir_list: "list[RedirectionNode]"
 
     def __init__(self, line_number, assignments, arguments, redir_list):
         self.line_number = line_number
@@ -135,7 +169,7 @@ class SubshellNode(Command):
     NodeName = 'Subshell'
     line_number: int
     body: Command
-    redir_list: list # bash stores the redirects elsewhere
+    redir_list: "list[RedirectionNode]" # bash stores the redirects elsewhere
 
     def __init__(self, line_number, body, redir_list):
         self.line_number = line_number
@@ -291,7 +325,7 @@ class RedirNode(Command):
     NodeName = 'Redir'
     line_number: int | None # bash has no line number for redir nodes
     node: Command
-    redir_list: list
+    redir_list: "list[RedirectionNode]"
 
     def __init__(self, line_number, node, redir_list):
         self.line_number = line_number
@@ -319,7 +353,7 @@ class BackgroundNode(Command):
     line_number: int | None  # bash has no line number for background nodes
     node: Command
     after_ampersand: Command | None # only used in bash
-    redir_list: list
+    redir_list: "list[RedirectionNode]"
     no_braces: bool
 
     def __init__(self, line_number, node, redir_list, after_ampersand=None, no_braces=False):
@@ -508,7 +542,7 @@ class CaseNode(Command):
     NodeName = 'Case'
     line_number: int
     argument: "list[ArgChar]"
-    cases: list
+    cases: "list[CaseItem]"
 
     def __init__(self, line_number, argument, cases):
         self.line_number = line_number
@@ -622,7 +656,7 @@ class EArgChar(ArgChar):
 
 class TArgChar(ArgChar):
     NodeName = 'T'
-    string: str
+    string: TildeExpansion
 
     def __init__(self, string: str):
         self.string = string
@@ -672,7 +706,7 @@ class AArgChar(ArgChar):
 
 class VArgChar(ArgChar):
     NodeName = 'V'
-    fmt: object
+    fmt: VarType
     null: bool
     var: str
     arg: "list[ArgChar]"
@@ -779,7 +813,7 @@ class BArgChar(ArgChar):
 
 class PArgChar(ArgChar, BashNode):
     NodeName = "P"
-    op: str
+    op: ProcessSubOp
     node: Command
 
     def __init__(self, op: str, node: Command):
@@ -829,7 +863,7 @@ class RedirectionNode(AstNode):
 
 class FileRedirNode(RedirectionNode):
     NodeName = "File"
-    redir_type: str
+    redir_type: FileRedirType
     fd: FdType # either ('var', filename) or ('fixed', fd)
     arg: "list[ArgChar]"
 
@@ -871,7 +905,7 @@ class FileRedirNode(RedirectionNode):
 
 class DupRedirNode(RedirectionNode):
     NodeName = "Dup"
-    dup_type: str
+    dup_type: DupRedirType
     fd: FdType # either ('var', filename) or ('fixed', fd)
     arg: FdType # either ('var', filename) or ('fixed', fd)
     move: bool
@@ -925,7 +959,7 @@ class DupRedirNode(RedirectionNode):
     
 class HeredocRedirNode(RedirectionNode):
     NodeName = "Heredoc"
-    heredoc_type: str
+    heredoc_type: HeredocType
     fd: FdType  # either ('var', filename) or ('fixed', fd)
     arg: "list[ArgChar]"
     kill_leading: bool
@@ -1298,7 +1332,7 @@ class TimeNode(Command, BashNode):
 
 class SingleArgRedirNode(RedirectionNode, BashNode):
     NodeName = "SingleArg"
-    redir_type: str
+    redir_type: SingleArgRedirType
     fd: FdType # Either ('var', filename) or ('fixed', fd)
     arg: None
 
