@@ -16,18 +16,14 @@ from pathlib import Path
 
 import pytest
 
-# Path setup
+# Path setup - use local files in the same directory
 TEST_DIR = Path(__file__).parent
-SHASTA_ROOT = TEST_DIR.parent.parent
-PASH_ROOT = SHASTA_ROOT.parent
-TUTORIAL_DIR = PASH_ROOT / "popl26-tutorial"
-SOLUTION_DIR = TUTORIAL_DIR / "SOLUTION"
-SH_DIR = TUTORIAL_DIR / "sh"
+SH_DIR = TEST_DIR / "sh"
 
-# Add SOLUTION directory to path for imports
-sys.path.insert(0, str(SOLUTION_DIR))
+# Add test directory to path for local imports
+sys.path.insert(0, str(TEST_DIR))
 
-# Import from tutorial solution
+# Import from local solution module
 from solution import (
     step1_parse_script,
     step4_subshells,
@@ -42,24 +38,24 @@ class TestTypechecking:
 
     def test_mypy_solution_py(self):
         """Run mypy on solution.py and ensure no type errors."""
-        solution_path = SOLUTION_DIR / "solution.py"
+        solution_path = TEST_DIR / "solution.py"
         result = subprocess.run(
             [sys.executable, "-m", "mypy", str(solution_path), "--ignore-missing-imports"],
             capture_output=True,
             text=True,
-            cwd=str(SOLUTION_DIR),
+            cwd=str(TEST_DIR),
         )
         # mypy returns 0 on success
         assert result.returncode == 0, f"mypy failed on solution.py:\n{result.stdout}\n{result.stderr}"
 
     def test_mypy_utils_py(self):
         """Run mypy on utils.py and ensure no type errors."""
-        utils_path = SOLUTION_DIR / "utils.py"
+        utils_path = TEST_DIR / "utils.py"
         result = subprocess.run(
             [sys.executable, "-m", "mypy", str(utils_path), "--ignore-missing-imports"],
             capture_output=True,
             text=True,
-            cwd=str(SOLUTION_DIR),
+            cwd=str(TEST_DIR),
         )
         assert result.returncode == 0, f"mypy failed on utils.py:\n{result.stdout}\n{result.stderr}"
 
