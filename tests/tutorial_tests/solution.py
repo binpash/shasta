@@ -10,7 +10,8 @@ Adapted from the POPL26 tutorial.
 
 from collections.abc import Iterator
 
-from utils import parse_shell_to_asts, ast_to_code, walk_ast, walk_ast_node
+from utils import parse_shell_to_asts, ast_to_code
+from shasta.ast_walker import walk_ast, walk_ast_node
 from shasta import ast_node as AST
 
 

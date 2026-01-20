@@ -29,7 +29,8 @@ from solution import (
     step4_subshells,
     is_effect_free,
 )
-from utils import parse_shell_to_asts, ast_to_code, walk_ast, walk_ast_node
+from utils import parse_shell_to_asts, ast_to_code
+from shasta.ast_walker import walk_ast, walk_ast_node
 from shasta import ast_node as AST
 
 
