@@ -1,0 +1,54 @@
+name: PaSh Downstream Tests
+
+on:
+  pull_request_target:
+    types: [assigned, opened, synchronize, reopened, ready_for_review]
+    paths:
+      - shasta/**
+  push:
+    branches:
+      - main
+      - future
+    paths:
+      - shasta/**
+
+jobs:
+  pash-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+    runs-on: ${{ matrix.os }}
+    if: github.event.pull_request.draft == false
+    steps:
+      - name: Checkout shasta (this PR)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: shasta
+
+      - name: Checkout PaSh
+        uses: actions/checkout@v4
+        with:
+          repository: binpash/pash
+          path: pash
+
+      - name: Install PaSh and override shasta with HEAD
+        run: |
+          sudo touch /.githubenv
+          cd pash
+          # Install system dependencies
+          sudo -E bash scripts/distro-deps.sh -o
+          # Install PaSh (pulls shasta from PyPI)
+          sudo -E bash scripts/setup-pash.sh -o
+          # Override shasta with the version from this PR
+          python_pkgs/bin/pip install -e "$GITHUB_WORKSPACE/shasta"
+
+      - name: Run PaSh tests
+        run: |
+          cd pash
+          source python_pkgs/bin/activate
+          export PASH_TOP=$PWD/src/pash
+          export PATH=$PATH:$PASH_TOP
+          cd scripts && bash run_tests.sh
