@@ -1,9 +1,14 @@
 """
 Generic AST walker for shell AST nodes.
 
-Provides a reusable tree traversal with visitor and replacement callbacks.
+Provides:
+- ``walk_ast_node``: A function-based deep traversal of all AST nodes
+  (including arguments, redirections, etc.).
+- ``CommandVisitor``: A class-based visitor for the command-level tree
+  (only Command-type children, not arguments/redirections).
 """
 
+from __future__ import annotations
 from typing import Iterable
 
 from shasta.ast_node import (
@@ -308,3 +313,114 @@ def walk_ast(ast: Iterable[Parsed], visit=None, replace=None):
     :param replace: A replacement function (returns the replacement node, should not mutate the tree)
     """
     return [walk_ast_node(node, visit=visit, replace=replace) for node, _, _, _ in ast]
+
+
+# ---------------------------------------------------------------------------
+# Command-level visitor
+# ---------------------------------------------------------------------------
+
+
+def command_child_attrs(node: AstNode) -> list[str]:
+    """
+    Return attribute names containing single Command children for a node.
+
+    List-type children (``PipeNode.items``, ``CaseNode.cases``) are **not**
+    included here; they are handled directly in
+    :meth:`CommandVisitor.walk_children`.
+    """
+    match node:
+        # True leaf nodes (no command children at all)
+        case CommandNode() | ArithNode():
+            return []
+        # PipeNode items handled as list in walk_children
+        case PipeNode():
+            return []
+        # CaseNode cases handled as list in walk_children
+        case CaseNode():
+            return []
+        # Single command child
+        case RedirNode():
+            return ["node"]
+        case SubshellNode() | NotNode() | GroupNode() | CoprocNode() | SelectNode():
+            return ["body"]
+        case TimeNode():
+            return ["command"]
+        case ArithForNode():
+            return ["action"]
+        case BackgroundNode():
+            attrs = ["node"]
+            if node.after_ampersand is not None:
+                attrs.append("after_ampersand")
+            return attrs
+        case DefunNode():
+            return ["body"]
+        case ForNode():
+            return ["body"]
+        # Two command children
+        case SemiNode() | AndNode() | OrNode():
+            return ["left_operand", "right_operand"]
+        case WhileNode():
+            return ["test", "body"]
+        # Variable number of children
+        case IfNode():
+            attrs = ["cond", "then_b"]
+            if node.else_b is not None:
+                attrs.append("else_b")
+            return attrs
+        case CondNode():
+            attrs: list[str] = []
+            if node.left is not None:
+                attrs.append("left")
+            if node.right is not None:
+                attrs.append("right")
+            return attrs
+        case _:
+            return []
+
+
+class CommandVisitor:
+    """
+    Base visitor for the command-level tree of a shell AST.
+
+    Walks only ``Command``-type children (not arguments, redirections,
+    assignments, etc.).  Override ``visit_<nodetype>()`` methods to
+    customise behaviour at specific node types.  The default
+    :meth:`generic_visit` recurses into all command children.
+
+    Example::
+
+        class Printer(CommandVisitor):
+            def visit_command(self, node):
+                print(node.pretty())
+                return node
+
+        Printer().visit(root)
+    """
+
+    def visit(self, node: AstNode) -> AstNode:
+        """Dispatch to ``visit_<nodetype>`` or :meth:`generic_visit`."""
+        method_name = f"visit_{type(node).NodeName.lower()}"
+        method = getattr(self, method_name, self.generic_visit)
+        return method(node)
+
+    def generic_visit(self, node: AstNode) -> AstNode:
+        """Default: walk all command children and return *node*."""
+        self.walk_children(node)
+        return node
+
+    def walk_children(self, node: AstNode) -> None:
+        """Walk all command-type children of *node* (in-place mutation)."""
+        # Single-attribute children
+        for attr in command_child_attrs(node):
+            child = getattr(node, attr)
+            if child is not None:
+                new_child = self.visit(child)
+                setattr(node, attr, new_child)
+        # List children: PipeNode.items
+        if isinstance(node, PipeNode):
+            node.items = [self.visit(item) for item in node.items]
+        # List children: CaseNode case bodies
+        if isinstance(node, CaseNode):
+            for case in node.cases:
+                if case.get("cbody") is not None:
+                    case["cbody"] = self.visit(case["cbody"])
