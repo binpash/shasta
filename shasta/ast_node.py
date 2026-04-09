@@ -1403,3 +1403,64 @@ class GroupNode(AstNode, BashNode):
                 return "{ " + self.body.pretty() + " }"
             else:
                 return "{ " + self.body.pretty() + "; }"
+
+
+def cond_node_to_command_node(cond: CondNode) -> CommandNode:
+    def _argchars(text: str) -> list[ArgChar]:
+        return [CArgChar(ord(ch), bash_mode=True) for ch in text]
+
+    def _cond_args(node: CondNode) -> list[list[ArgChar]]:
+        args: list[list[ArgChar]] = []
+        if node.invert_return:
+            args.append(_argchars("!"))
+
+        if node.cond_type == CondType.COND_EXPR.value:
+            if not isinstance(node.left, CondNode):
+                return args
+            args.append(_argchars("("))
+            args.extend(_cond_args(node.left))
+            args.append(_argchars(")"))
+            return args
+
+        if node.cond_type == CondType.COND_AND.value:
+            if not isinstance(node.left, CondNode) or not isinstance(node.right, CondNode):
+                return args
+            args.extend(_cond_args(node.left))
+            args.append(_argchars("&&"))
+            args.extend(_cond_args(node.right))
+            return args
+
+        if node.cond_type == CondType.COND_OR.value:
+            if not isinstance(node.left, CondNode) or not isinstance(node.right, CondNode):
+                return args
+            args.extend(_cond_args(node.left))
+            args.append(_argchars("||"))
+            args.extend(_cond_args(node.right))
+            return args
+
+        if node.cond_type == CondType.COND_UNARY.value:
+            if node.op is not None:
+                args.append(node.op)
+            if isinstance(node.left, CondNode):
+                args.extend(_cond_args(node.left))
+            return args
+
+        if node.cond_type == CondType.COND_BINARY.value:
+            if not isinstance(node.left, CondNode) or not isinstance(node.right, CondNode):
+                return args
+            args.extend(_cond_args(node.left))
+            if node.op is not None:
+                args.append(node.op)
+            args.extend(_cond_args(node.right))
+            return args
+
+        if node.cond_type == CondType.COND_TERM.value:
+            if node.op is not None:
+                args.append(node.op)
+            return args
+
+        return args
+
+    line_number = cond.line_number if isinstance(cond.line_number, int) else -1
+    args = [_argchars("[[")] + _cond_args(cond) + [_argchars("]]")]
+    return CommandNode(line_number, [], args, [])

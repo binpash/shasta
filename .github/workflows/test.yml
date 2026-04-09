@@ -4,6 +4,7 @@ on:
     types: [assigned, opened, synchronize, reopened, ready_for_review]
     paths: 
         - shasta/**
+        - tests/misc_tests/**
   push:
     branches:
       - main
@@ -11,6 +12,7 @@ on:
     paths: 
       - libdash/**
       - shasta/**
+      - tests/misc_tests/**
 jobs:
   Shasta-Test:
     strategy:
