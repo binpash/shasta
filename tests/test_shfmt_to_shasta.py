@@ -56,7 +56,7 @@ CASES = {
         "{ a; b; }",
         "( a; b )",
     ],
-    # constructs whose printing needed the subclasses in shasta/shfmt_nodes.py
+    # constructs whose printing needed the node subclasses in shasta/shfmt_to_shasta_ast.py
     "printer_shims": [
         "if a; then b & fi",
         "if a; then b & else c & fi",
