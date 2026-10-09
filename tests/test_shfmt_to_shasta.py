@@ -20,19 +20,19 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from shasta.ast_node import make_typed_semi_sequence  # noqa: E402
 from shasta.shfmt_to_shasta_ast import parse_string  # noqa: E402
 
-# Add cases as you implement each construct. Grouped in the suggested order.
+# Test snippets, grouped by construct.
 CASES = {
     "simple": [
         "echo hi",
         "x=1 y=2 prog a b",
         "echo a\\ b",
     ],
-    "step1_stmt": [
+    "statements": [
         "! ls",
         "ls &",
         "ls; ls; ls",
     ],
-    "step2_binary": [
+    "binary_ops": [
         "a && b",
         "a || b",
         "a | b | c",
@@ -43,7 +43,7 @@ CASES = {
         "a | b &",
         "a && b | c",
     ],
-    "step3_compound": [
+    "compound": [
         "if a; then b; fi",
         "if a; then b; elif c; then d; else e; fi",
         "if a; then b; elif c; then d; elif e; then f; fi",
@@ -57,7 +57,7 @@ CASES = {
         "( a; b )",
     ],
     # constructs whose printing needed the node subclasses in shasta/shfmt_to_shasta_ast.py
-    "printer_shims": [
+    "printing": [
         "if a; then b & fi",
         "if a; then b & else c & fi",
         "if a; then b; elif c; then d & fi",
@@ -74,7 +74,7 @@ CASES = {
         "f() ( a; b ) >&2",
         "echo $(cat <<EOF\nhi\nEOF\n)",
     ],
-    "step4_for_case_func": [
+    "for_case_function": [
         "for i in a b c; do echo x; done",
         "for i in; do x; done",
         "for i; do x; done",
@@ -95,7 +95,7 @@ CASES = {
         "case $x in a) b;; c|d) e;; esac",
         "f() { echo hi; }",
     ],
-    "step5_quoting": [
+    "quoting_expansion": [
         "echo 'a$x'",
         'echo "a\\"b"',
         'echo "hi $x"',
@@ -103,7 +103,7 @@ CASES = {
         "echo $(ls | wc -l)",
         'echo "n: $(ls)"',
     ],
-    "step6_redirects": [
+    "redirects": [
         "cat > f",
         "cat < f >> g",
         "cmd 2>&1",
@@ -231,8 +231,8 @@ def check(source: str) -> str | None:
     try:
         text = roundtrip_text(source)
     except NotImplementedError as exc:
-        return f"not implemented yet: {exc}"
-    except Exception as exc:  # noqa: BLE001 - we want the message for learners
+        return f"unsupported: {exc}"
+    except Exception as exc:  # noqa: BLE001 - report any failure as a message
         return f"{type(exc).__name__}: {exc}"
     try:
         same = shfmt_tree(source) == shfmt_tree(text)
@@ -253,7 +253,7 @@ try:
     @pytest.mark.parametrize("group,source", _all_cases())
     def test_roundtrip(group, source):
         failure = check(source)
-        if failure and failure.startswith("not implemented"):
+        if failure and failure.startswith("unsupported"):
             pytest.xfail(failure)
         assert failure is None, failure
 
@@ -263,23 +263,23 @@ except ImportError:  # plain-script mode
 
 def main() -> int:
     only = sys.argv[1] if len(sys.argv) > 1 else None
-    counts = {"ok": 0, "todo": 0, "FAIL": 0}
+    counts = {"ok": 0, "unsupported": 0, "FAIL": 0}
     for group, source in _all_cases():
         if only and only not in group:
             continue
         failure = check(source)
         if failure is None:
             status = "ok"
-        elif failure.startswith("not implemented"):
-            status = "todo"
+        elif failure.startswith("unsupported"):
+            status = "unsupported"
         else:
             status = "FAIL"
         counts[status] += 1
         label = source.replace("\n", "\\n")
-        print(f"[{status:4}] {group:20} {label}")
+        print(f"[{status:11}] {group:20} {label}")
         if status == "FAIL":
             print("       " + failure.replace("\n", "\n       "))
-    print(f"\n{counts['ok']} ok, {counts['todo']} todo, {counts['FAIL']} FAIL")
+    print(f"\n{counts['ok']} ok, {counts['unsupported']} unsupported, {counts['FAIL']} FAIL")
     return 1 if counts["FAIL"] else 0
 
 

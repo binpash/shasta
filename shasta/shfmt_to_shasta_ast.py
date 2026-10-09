@@ -258,7 +258,7 @@ def command_to_node(cmd: Json) -> AstNode:
     return handler(cmd)
 
 def call_expr_to_node(cmd: Json) -> AstNode:
-    """WORKED EXAMPLE: `x=1 y=2 prog arg1 arg2`.
+    """A simple command: `x=1 y=2 prog arg1 arg2`.
 
     JSON:  {"Type": "CallExpr",
             "Assigns": [{"Name": {"Value": "x"}, "Value": <Word>}, ...],

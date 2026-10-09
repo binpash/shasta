@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Scratch tool: show what a snippet becomes at each stage.
+"""Show what a snippet becomes at each stage: shfmt JSON, Shasta tree, printed text.
 
     ./shfmt_try.py 'x=1 echo hi'
     echo 'ls | wc' | ./shfmt_try.py
