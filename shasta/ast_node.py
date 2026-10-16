@@ -836,6 +836,212 @@ class PArgChar(ArgChar, BashNode):
             pass
         return f"{self.op}{body})"
 
+##### BASH EXPANSIONS (ArgChar types that only bash has) #####
+# Naming: each class is <Name>ArgChar and its NodeName (the key in the JSON form) is exactly <Name>.
+
+class ArrayRefArgChar(ArgChar, BashNode):
+    """
+    A reference to an array element, or to all of them: `${a[i]}`, `${a[@]}`, `${#a[@]}`, `${a[i]:-x}`.
+    `fmt`, `null` and `arg` mean what they do in `VArgChar` (`Length` is `${#a[...]}`, `Minus` is `${a[...]:-arg}`).
+    `index` is the subscript, whose own expansions (`${a[$i]}`, `${a[$(cmd)]}`) stay nodes; `@` and `*` mean every element.
+    """
+    NodeName = "ArrayRef"
+    fmt: VarType
+    null: bool
+    var: str
+    index: "list[ArgChar]"
+    arg: "list[ArgChar]"
+
+    def __init__(self, fmt, null: bool, var: str, index: "list[ArgChar]", arg: "list[ArgChar]"):
+        self.fmt = fmt
+        self.null = null
+        self.var = var
+        self.index = index
+        self.arg = arg
+
+    def __repr__(self):
+        return f'ArrayRef({self.fmt},{self.null},{self.var},{self.index},{self.arg})'
+
+    def format(self) -> str:
+        return '${{{}[{}]}}'.format(self.var, "".join(c.format() for c in self.index))
+
+    def json(self):
+        return make_kv(ArrayRefArgChar.NodeName, [self.fmt, self.null, self.var, self.index, self.arg])
+
+    def pretty(self, quote_mode=UNQUOTED):
+        subscript = self.var + "[" + string_of_arg(self.index, quote_mode) + "]"
+        if self.fmt == "Length":
+            return "${#" + subscript + "}"
+        stri = "${" + subscript
+        if str(self.null).lower() == "true":
+            stri += ":"
+        return stri + string_of_var_type(self.fmt) + string_of_arg(self.arg, quote_mode) + "}"
+
+
+class ArrayLiteralArgChar(ArgChar, BashNode):
+    """
+    The value of an array assignment: `(x [3]=y "z w")`. Each element is a pair of an optional explicit index
+    (a list of ArgChars, or None) and the element's value (a list of ArgChars).
+    """
+    NodeName = "ArrayLiteral"
+    elements: "list[tuple[list[ArgChar] | None, list[ArgChar]]]"
+
+    def __init__(self, elements):
+        self.elements = [(index, value) for index, value in elements]
+
+    def __repr__(self):
+        return f'ArrayLiteral({self.elements})'
+
+    def format(self) -> str:
+        return self.pretty()
+
+    def json(self):
+        return make_kv(ArrayLiteralArgChar.NodeName, [[index, value] for index, value in self.elements])
+
+    def pretty(self, quote_mode=UNQUOTED):
+        items = []
+        for index, value in self.elements:
+            prefix = "[" + string_of_arg(index) + "]=" if index is not None else ""
+            items.append(prefix + string_of_arg(value))
+        return "(" + " ".join(items) + ")"
+
+
+class ExtGlobArgChar(ArgChar, BashNode):
+    """An extended glob: `@(a|b)`, `?(a)`, `*(a)`, `+(a)`, `!(a)`. `op` is one of `?*+@!`; `patterns` are the alternatives."""
+    NodeName = "ExtGlob"
+    op: str
+    patterns: "list[list[ArgChar]]"
+
+    def __init__(self, op: str, patterns: "list[list[ArgChar]]"):
+        self.op = op
+        self.patterns = patterns
+
+    def __repr__(self):
+        return f'ExtGlob({self.op},{self.patterns})'
+
+    def format(self) -> str:
+        return self.pretty()
+
+    def json(self):
+        return make_kv(ExtGlobArgChar.NodeName, [self.op, self.patterns])
+
+    def pretty(self, quote_mode=UNQUOTED):
+        return self.op + "(" + "|".join(string_of_arg(p, quote_mode) for p in self.patterns) + ")"
+
+
+class BraceArgChar(ArgChar, BashNode):
+    """
+    Brace expansion: `{a,b}` (`sequence` is False; `elements` are the alternatives) and `{1..3}`, `{a..e}`, `{01..10..2}`
+    (`sequence` is True; `elements` are the start, the end and, if given, the step).
+    """
+    NodeName = "Brace"
+    elements: "list[list[ArgChar]]"
+    sequence: bool
+
+    def __init__(self, elements: "list[list[ArgChar]]", sequence: bool = False):
+        self.elements = elements
+        self.sequence = sequence
+
+    def __repr__(self):
+        return f'Brace({self.elements},{self.sequence})'
+
+    def format(self) -> str:
+        return self.pretty()
+
+    def json(self):
+        return make_kv(BraceArgChar.NodeName, [self.elements, self.sequence])
+
+    def pretty(self, quote_mode=UNQUOTED):
+        separator = ".." if self.sequence else ","
+        return "{" + separator.join(string_of_arg(e, quote_mode) for e in self.elements) + "}"
+
+
+class AnsiCArgChar(ArgChar, BashNode):
+    """ANSI-C quoting: `$'a\\tb'`. `text` is what is written between the quotes; `value` is the string it stands for."""
+    NodeName = "AnsiC"
+    text: str
+
+    _SIMPLE = {"a": "\a", "b": "\b", "e": "\x1b", "E": "\x1b", "f": "\f", "n": "\n",
+               "r": "\r", "t": "\t", "v": "\v", "\\": "\\", "'": "'", '"': '"', "?": "?"}
+
+    def __init__(self, text: str):
+        self.text = text
+
+    def __repr__(self):
+        return f'AnsiC({self.text!r})'
+
+    @property
+    def value(self) -> str:
+        """The text with its backslash escapes decoded: `\\n \\t \\e \\xHH \\NNN \\uHHHH \\UHHHHHHHH` and the like."""
+        import re
+        text, out, i = self.text, [], 0
+        while i < len(text):
+            ch = text[i]
+            if ch != "\\" or i + 1 >= len(text):
+                out.append(ch)
+                i += 1
+                continue
+            nxt = text[i + 1]
+            if nxt in self._SIMPLE:
+                out.append(self._SIMPLE[nxt])
+                i += 2
+            elif nxt in "01234567":
+                m = re.match(r"[0-7]{1,3}", text[i + 1:])
+                out.append(chr(int(m.group(), 8) & 0xFF))
+                i += 1 + len(m.group())
+            elif nxt in "xuU":
+                m = re.match(r"[0-9a-fA-F]{1,%d}" % {"x": 2, "u": 4, "U": 8}[nxt], text[i + 2:])
+                if m:
+                    out.append(chr(int(m.group(), 16)))
+                    i += 2 + len(m.group())
+                else:
+                    out.append(text[i:i + 2])
+                    i += 2
+            else:
+                out.append(text[i:i + 2])  # an unknown escape is kept as written
+                i += 2
+        return "".join(out)
+
+    def format(self) -> str:
+        return self.pretty()
+
+    def json(self):
+        return make_kv(AnsiCArgChar.NodeName, self.text)
+
+    def pretty(self, quote_mode=UNQUOTED):
+        return "$'" + self.text + "'"
+
+
+class ParamExpArgChar(ArgChar, BashNode):
+    """
+    A bash parameter expansion that has no `VArgChar` / `ArrayRefArgChar` form: substring `${a:1:2}`, replacement `${a/x/y}`,
+    case change `${a^^}`, indirection `${!a}`, key listing `${!a[@]}`, prefix listing `${!p*}`, transformation `${a@Q}`.
+    `name` is the parameter, `operation` says which kind it is, and `parts` is what is written between `${` and `}`
+    as ArgChars (its literal syntax, with any nested expansions as nodes).
+    """
+    NodeName = "ParamExp"
+    name: str
+    operation: str
+    parts: "list[ArgChar]"
+
+    def __init__(self, name: str, operation: str, parts: "list[ArgChar]"):
+        self.name = name
+        self.operation = operation
+        self.parts = parts
+
+    def __repr__(self):
+        return f'ParamExp({self.name},{self.operation},{self.parts})'
+
+    def format(self) -> str:
+        return self.pretty()
+
+    def json(self):
+        return make_kv(ParamExpArgChar.NodeName, [self.name, self.operation, self.parts])
+
+    def pretty(self, quote_mode=UNQUOTED):
+        return "${" + string_of_arg(self.parts, quote_mode) + "}"
+
+
 class AssignNode(AstNode):
     var: str
     val: "list[ArgChar]"
