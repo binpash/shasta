@@ -49,6 +49,14 @@ from .ast_node import (
     is_empty_cmd,
     string_of_case,
 )
+from .ast_node import (
+    AnsiCArgChar,
+    ArrayLiteralArgChar,
+    ArrayRefArgChar,
+    BraceArgChar,
+    ExtGlobArgChar,
+    ParamExpArgChar,
+)
 from .print_lib import UNQUOTED, separated, string_of_redirs
 
 MIN_SHFMT_VERSION = (3, 14, 0)
@@ -105,8 +113,8 @@ def _pad_subshell(body: str) -> str:
 
 
 class SingleQuotedArgChar(QArgChar):
-    """`'...'` / `$'...'`: a QArgChar whose children are the literal (decoded) text, as
-    libdash builds it, but printed back with its original quoting."""
+    """`'...'`: a QArgChar whose children are the literal text, as libdash builds it,
+    but printed back with its single quotes."""
 
     def __init__(self, arg, raw):
         super().__init__(arg)
@@ -331,14 +339,11 @@ def assign_to_arg_chars(assign: Json) -> list[ArgChar]:
 
 
 def array_to_arg_chars(array: Json) -> list[ArgChar]:
-    out = text_to_arg_chars("(")
-    for n, elem in enumerate(array.get("Elems", [])):
-        if n:
-            out += text_to_arg_chars(" ")
-        if elem.get("Index"):
-            out += text_to_arg_chars("[") + arith_to_arg_chars(elem["Index"]) + text_to_arg_chars("]=")
-        out += word_to_arg_chars(elem.get("Value"))
-    return out + text_to_arg_chars(")")
+    """The `(x [3]=y "z w")` of an array assignment."""
+    return [ArrayLiteralArgChar([
+        (arith_to_arg_chars(elem["Index"]) if elem.get("Index") else None, word_to_arg_chars(elem.get("Value")))
+        for elem in array.get("Elems", [])
+    ])]
 
 
 def flatten_pipe(left: AstNode, right: AstNode) -> list[AstNode]:
@@ -575,6 +580,54 @@ def text_to_arg_chars(text: str) -> list[ArgChar]:
 _TILDE_PREFIX = re.compile(r"~([A-Za-z0-9._-]*)(?=/|$)")
 
 
+_BRACE_SEQUENCE = re.compile(r"(-?\d+)\.\.(-?\d+)(?:\.\.(-?\d+))?\Z|([A-Za-z])\.\.([A-Za-z])(?:\.\.(-?\d+))?\Z")
+
+
+def _is_char(c: ArgChar, ch: str) -> bool:
+    return isinstance(c, CArgChar) and c.char == ord(ch)
+
+
+def wrap_braces(word: list[ArgChar]) -> list[ArgChar]:
+    """Turn the `{a,b}` and `{1..3}` in an unquoted word into BraceArgChars (shfmt leaves them as plain text)."""
+    def escaped(i: int) -> bool:
+        return i > 0 and _is_char(word[i - 1], "\\")
+
+    out: list[ArgChar] = []
+    i = 0
+    while i < len(word):
+        if _is_char(word[i], "{") and not escaped(i) and not (i > 0 and _is_char(word[i - 1], "$")):
+            depth, end, commas = 0, None, []
+            for j in range(i, len(word)):
+                if escaped(j):
+                    continue
+                if _is_char(word[j], "{"):
+                    depth += 1
+                elif _is_char(word[j], "}"):
+                    depth -= 1
+                    if depth == 0:
+                        end = j
+                        break
+                elif _is_char(word[j], ",") and depth == 1:
+                    commas.append(j)
+            if end is not None:
+                body = word[i + 1:end]
+                if commas:
+                    bounds = [i] + commas + [end]
+                    alternatives = [word[bounds[k] + 1:bounds[k + 1]] for k in range(len(bounds) - 1)]
+                    out.append(BraceArgChar([wrap_braces(alt) for alt in alternatives], sequence=False))
+                    i = end + 1
+                    continue
+                if all(isinstance(c, CArgChar) for c in body):
+                    text = "".join(chr(c.char) for c in body)
+                    if _BRACE_SEQUENCE.match(text):
+                        out.append(BraceArgChar([text_to_arg_chars(piece) for piece in text.split("..")], sequence=True))
+                        i = end + 1
+                        continue
+        out.append(word[i])
+        i += 1
+    return out
+
+
 def word_to_arg_chars(word: Json | None, quoted: bool = False) -> list[ArgChar]:
     chars: list[ArgChar] = []
     for i, part in enumerate((word or {}).get("Parts", [])):
@@ -586,7 +639,7 @@ def word_to_arg_chars(word: Json | None, quoted: bool = False) -> list[ArgChar]:
                 chars.extend(lit_to_arg_chars({**part, "Value": part["Value"][match.end():]}, quoted))
                 continue
         chars.extend(word_part_to_arg_chars(part, quoted))
-    return chars
+    return chars if quoted else wrap_braces(chars)
 
 
 def word_part_to_arg_chars(part: Json, quoted: bool = False) -> list[ArgChar]:
@@ -619,50 +672,13 @@ def lit_to_arg_chars(part: Json, quoted: bool = False) -> list[ArgChar]:
     return chars
 
 
-_ANSI_C_SIMPLE = {"a": "\a", "b": "\b", "e": "\x1b", "E": "\x1b", "f": "\f", "n": "\n",
-                  "r": "\r", "t": "\t", "v": "\v", "\\": "\\", "'": "'", '"': '"', "?": "?"}
-
-
-def decode_ansi_c(text: str) -> str:
-    """The value of a `$'...'` string: backslash escapes are decoded."""
-    out: list[str] = []
-    i = 0
-    while i < len(text):
-        ch = text[i]
-        if ch != "\\" or i + 1 >= len(text):
-            out.append(ch)
-            i += 1
-            continue
-        nxt = text[i + 1]
-        if nxt in _ANSI_C_SIMPLE:
-            out.append(_ANSI_C_SIMPLE[nxt])
-            i += 2
-        elif nxt in "01234567":
-            m = re.match(r"[0-7]{1,3}", text[i + 1 :])
-            out.append(chr(int(m.group(), 8) & 0xFF))
-            i += 1 + len(m.group())
-        elif nxt in "xuU":
-            width = {"x": 2, "u": 4, "U": 8}[nxt]
-            m = re.match(r"[0-9a-fA-F]{1,%d}" % width, text[i + 2 :])
-            if m:
-                out.append(chr(int(m.group(), 16)))
-                i += 2 + len(m.group())
-            else:
-                out.append(text[i : i + 2])
-                i += 2
-        else:
-            out.append(text[i : i + 2])  # unknown escape: kept as written
-            i += 2
-    return "".join(out)
-
-
 def sgl_quoted_to_arg_chars(part: Json, quoted: bool = False) -> list[ArgChar]:
+    value = part.get("Value", "")
+    if part.get("Dollar"):
+        return [AnsiCArgChar(value)]  # `$'...'`
     # Same shape as libdash: a QArgChar holding the literal characters. The subclass
     # keeps the single quotes when printing, since QArgChar prints double quotes
     # (which would make `$x` expand).
-    value = part.get("Value", "")
-    if part.get("Dollar"):
-        return [SingleQuotedArgChar(text_to_arg_chars(decode_ansi_c(value)), "$'" + value + "'")]
     return [SingleQuotedArgChar(text_to_arg_chars(value), "'" + value + "'")]
 
 
@@ -689,7 +705,20 @@ def arithm_exp_to_arg_chars(part: Json, quoted: bool = False) -> list[ArgChar]:
 
 
 def ext_glob_to_arg_chars(part: Json, quoted: bool = False) -> list[ArgChar]:
-    return text_to_arg_chars(part["Op"] + part["Pattern"]["Value"] + ")")
+    """`@(a|b)`: the operator (`part["Op"]` is `@(`) and the alternatives, which shfmt gives as one text."""
+    alternatives, current, depth = [], "", 0
+    for ch in part["Pattern"]["Value"]:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        if ch == "|" and depth == 0:
+            alternatives.append(current)
+            current = ""
+        else:
+            current += ch
+    alternatives.append(current)
+    return [ExtGlobArgChar(part["Op"][0], [text_to_arg_chars(alt) for alt in alternatives])]
 
 
 # Parameter expansions that fit VArgChar: operator -> (fmt, null)
@@ -713,7 +742,6 @@ def param_exp_to_arg_chars(part: Json, quoted: bool = False) -> list[ArgChar]:
         if key in part:
             raise NotImplementedError(f"parameter expansion field {key!r} (zsh/mksh)")
 
-    original_part = part
     name = (part.get("Param") or {}).get("Value")
     exp = part.get("Exp")
     if part.get("Short") and "Index" in part and "Dollar" not in part:
@@ -721,15 +749,14 @@ def param_exp_to_arg_chars(part: Json, quoted: bool = False) -> list[ArgChar]:
         return text_to_arg_chars(name) + text_to_arg_chars("[") + arith_to_arg_chars(part["Index"], quoted) + text_to_arg_chars("]")
     if name is not None and "Index" in part and not any(k in part for k in _OTHER_COMPLEX_PARAM_FIELDS):
         subscript = arith_to_arg_chars(part["Index"], quoted, spaced=False)
-        if exp is None and not part.get("Length"):
-            # `${a[i]}`: the variable `a` with its subscript as the expansion's argument, `[`, i, `]`.
-            # Like bash, the interpreter reads the subscript when it evaluates the expansion, but
-            # whatever is nested inside it (`$i`, `$(cmd)`) stays a real expansion node.
-            return [VArgChar("Normal", False, name, text_to_arg_chars("[") + subscript + text_to_arg_chars("]"))]
-        # `${#a[@]}` and `${a[0]:-x}` already use the argument (or print without it), so the
-        # subscript goes into the variable's name
-        name += "[" + string_of_arg(subscript) + "]"
-        part = {k: v for k, v in part.items() if k != "Index"}
+        if part.get("Length") and exp is None:
+            return [ArrayRefArgChar("Length", False, name, subscript, [])]
+        if not part.get("Length"):
+            if exp is None:
+                return [ArrayRefArgChar("Normal", False, name, subscript, [])]
+            if exp["Op"] in _VAR_FORMS:
+                fmt, null = _VAR_FORMS[exp["Op"]]
+                return [ArrayRefArgChar(fmt, null, name, subscript, word_to_arg_chars(exp.get("Word"), quoted))]
     if name is not None and not any(k in part for k in _COMPLEX_PARAM_FIELDS):
         if part.get("Length") and exp is None:
             return [VArgChar("Length", False, name, [])]
@@ -739,7 +766,26 @@ def param_exp_to_arg_chars(part: Json, quoted: bool = False) -> list[ArgChar]:
             if exp["Op"] in _VAR_FORMS:
                 fmt, null = _VAR_FORMS[exp["Op"]]
                 return [VArgChar(fmt, null, name, word_to_arg_chars(exp.get("Word"), quoted))]
-    return param_exp_skeleton(original_part, quoted)
+    skeleton = param_exp_skeleton(part, quoted)  # `${`, the body, `}`
+    return [ParamExpArgChar(name or "", _param_operation(part), skeleton[2:-1])]
+
+
+def _param_operation(part: Json) -> str:
+    """Which kind of expansion this is, for the ones that have no VArgChar / ArrayRefArgChar form."""
+    if part.get("Names"):
+        return "prefix_names"
+    if part.get("Excl"):
+        return "keys" if "Index" in part else "indirect"
+    if "Slice" in part:
+        return "slice"
+    if "Repl" in part:
+        return "replace_all" if part["Repl"].get("All") else "replace"
+    op = (part.get("Exp") or {}).get("Op", "")
+    if op in ("^", "^^", ",", ",,"):
+        return "case"
+    if op.startswith("@"):
+        return "transform"
+    return "other"
 
 
 def param_exp_skeleton(part: Json, quoted: bool) -> list[ArgChar]:
