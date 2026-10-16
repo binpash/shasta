@@ -31,6 +31,7 @@ from .ast_node import (
     RedirectionNode,
     SelectNode,
     SingleArgRedirNode,
+    TArgChar,
     SubshellNode,
     TimeNode,
     VArgChar,
@@ -101,6 +102,18 @@ def sequence(nodes):
 def _pad_subshell(body: str) -> str:
     # `$(((` is ambiguous with arithmetic `$((`, so a body that begins with `(` gets a space
     return f" {body} " if body[:1] == "(" else body
+
+
+class SingleQuotedArgChar(QArgChar):
+    """`'...'` / `$'...'`: a QArgChar whose children are the literal (decoded) text, as
+    libdash builds it, but printed back with its original quoting."""
+
+    def __init__(self, arg, raw):
+        super().__init__(arg)
+        self.raw = raw
+
+    def pretty(self, quote_mode=UNQUOTED):
+        return self.raw
 
 
 class CmdSubstArgChar(BArgChar):
@@ -559,9 +572,19 @@ def text_to_arg_chars(text: str) -> list[ArgChar]:
     return [CArgChar(ord(ch), bash_mode=True) for ch in text]
 
 
+_TILDE_PREFIX = re.compile(r"~([A-Za-z0-9._-]*)(?=/|$)")
+
+
 def word_to_arg_chars(word: Json | None, quoted: bool = False) -> list[ArgChar]:
     chars: list[ArgChar] = []
-    for part in (word or {}).get("Parts", []):
+    for i, part in enumerate((word or {}).get("Parts", [])):
+        if i == 0 and not quoted and part["Type"] == "Lit":
+            match = _TILDE_PREFIX.match(part["Value"])
+            if match:  # `~` and `~user` expand like libdash's TArgChar
+                user = match.group(1)
+                chars.append(TArgChar(("Some", user) if user else "None"))
+                chars.extend(lit_to_arg_chars({**part, "Value": part["Value"][match.end():]}, quoted))
+                continue
         chars.extend(word_part_to_arg_chars(part, quoted))
     return chars
 
@@ -596,10 +619,51 @@ def lit_to_arg_chars(part: Json, quoted: bool = False) -> list[ArgChar]:
     return chars
 
 
+_ANSI_C_SIMPLE = {"a": "\a", "b": "\b", "e": "\x1b", "E": "\x1b", "f": "\f", "n": "\n",
+                  "r": "\r", "t": "\t", "v": "\v", "\\": "\\", "'": "'", '"': '"', "?": "?"}
+
+
+def decode_ansi_c(text: str) -> str:
+    """The value of a `$'...'` string: backslash escapes are decoded."""
+    out: list[str] = []
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch != "\\" or i + 1 >= len(text):
+            out.append(ch)
+            i += 1
+            continue
+        nxt = text[i + 1]
+        if nxt in _ANSI_C_SIMPLE:
+            out.append(_ANSI_C_SIMPLE[nxt])
+            i += 2
+        elif nxt in "01234567":
+            m = re.match(r"[0-7]{1,3}", text[i + 1 :])
+            out.append(chr(int(m.group(), 8) & 0xFF))
+            i += 1 + len(m.group())
+        elif nxt in "xuU":
+            width = {"x": 2, "u": 4, "U": 8}[nxt]
+            m = re.match(r"[0-9a-fA-F]{1,%d}" % width, text[i + 2 :])
+            if m:
+                out.append(chr(int(m.group(), 16)))
+                i += 2 + len(m.group())
+            else:
+                out.append(text[i : i + 2])
+                i += 2
+        else:
+            out.append(text[i : i + 2])  # unknown escape: kept as written
+            i += 2
+    return "".join(out)
+
+
 def sgl_quoted_to_arg_chars(part: Json, quoted: bool = False) -> list[ArgChar]:
-    # Shasta has no single-quote node, and QArgChar prints double quotes (which
-    # would make `$x` expand). Keep the quotes as literal characters instead.
-    return text_to_arg_chars(("$" if part.get("Dollar") else "") + "'" + part.get("Value", "") + "'")
+    # Same shape as libdash: a QArgChar holding the literal characters. The subclass
+    # keeps the single quotes when printing, since QArgChar prints double quotes
+    # (which would make `$x` expand).
+    value = part.get("Value", "")
+    if part.get("Dollar"):
+        return [SingleQuotedArgChar(text_to_arg_chars(decode_ansi_c(value)), "$'" + value + "'")]
+    return [SingleQuotedArgChar(text_to_arg_chars(value), "'" + value + "'")]
 
 
 def dbl_quoted_to_arg_chars(part: Json, quoted: bool = False) -> list[ArgChar]:
@@ -638,7 +702,8 @@ _VAR_FORMS = {
     "#": ("TrimL", False), "##": ("TrimLMax", False),
 }
 _UNSUPPORTED_PARAM_FIELDS = ("Flags", "Width", "IsSet", "Split", "GlobSubst", "RcExpand", "Modifiers")
-_COMPLEX_PARAM_FIELDS = ("Excl", "NestedParam", "Index", "Slice", "Repl", "Names")
+_OTHER_COMPLEX_PARAM_FIELDS = ("Excl", "NestedParam", "Slice", "Repl", "Names")
+_COMPLEX_PARAM_FIELDS = _OTHER_COMPLEX_PARAM_FIELDS + ("Index",)
 # shfmt omits empty fields, but a present-and-empty struct (`${a/}`) encodes as {},
 # which is falsy in Python, so test these by key presence.
 
@@ -648,11 +713,23 @@ def param_exp_to_arg_chars(part: Json, quoted: bool = False) -> list[ArgChar]:
         if key in part:
             raise NotImplementedError(f"parameter expansion field {key!r} (zsh/mksh)")
 
+    original_part = part
     name = (part.get("Param") or {}).get("Value")
     exp = part.get("Exp")
     if part.get("Short") and "Index" in part and "Dollar" not in part:
         # `a[i]` inside (( )) with no `$`: a variable to assign to, not a value
         return text_to_arg_chars(name) + text_to_arg_chars("[") + arith_to_arg_chars(part["Index"], quoted) + text_to_arg_chars("]")
+    if name is not None and "Index" in part and not any(k in part for k in _OTHER_COMPLEX_PARAM_FIELDS):
+        subscript = arith_to_arg_chars(part["Index"], quoted, spaced=False)
+        if exp is None and not part.get("Length"):
+            # `${a[i]}`: the variable `a` with its subscript as the expansion's argument, `[`, i, `]`.
+            # Like bash, the interpreter reads the subscript when it evaluates the expansion, but
+            # whatever is nested inside it (`$i`, `$(cmd)`) stays a real expansion node.
+            return [VArgChar("Normal", False, name, text_to_arg_chars("[") + subscript + text_to_arg_chars("]"))]
+        # `${#a[@]}` and `${a[0]:-x}` already use the argument (or print without it), so the
+        # subscript goes into the variable's name
+        name += "[" + string_of_arg(subscript) + "]"
+        part = {k: v for k, v in part.items() if k != "Index"}
     if name is not None and not any(k in part for k in _COMPLEX_PARAM_FIELDS):
         if part.get("Length") and exp is None:
             return [VArgChar("Length", False, name, [])]
@@ -662,7 +739,7 @@ def param_exp_to_arg_chars(part: Json, quoted: bool = False) -> list[ArgChar]:
             if exp["Op"] in _VAR_FORMS:
                 fmt, null = _VAR_FORMS[exp["Op"]]
                 return [VArgChar(fmt, null, name, word_to_arg_chars(exp.get("Word"), quoted))]
-    return param_exp_skeleton(part, quoted)
+    return param_exp_skeleton(original_part, quoted)
 
 
 def param_exp_skeleton(part: Json, quoted: bool) -> list[ArgChar]:
