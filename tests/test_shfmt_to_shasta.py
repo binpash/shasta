@@ -22,6 +22,23 @@ from shasta.shfmt_to_shasta_ast import parse_string  # noqa: E402
 
 # Test snippets, grouped by construct.
 CASES = {
+    # bash expansions that have their own nodes in ast_node.py
+    "bash_expansions": [
+        "echo ${a[0]} ${a[@]} ${a[*]} ${#a[@]} ${#a[0]}",
+        'echo "${a[@]}" "${a[$i]}" ${a[i+1]} ${a[$(echo 1)]}',
+        "echo ${a[0]:-x} ${a[1]:=y} ${a[@]:+z}",
+        "a=(x y z)",
+        'a=(x [3]=y "z w" $v)',
+        "a+=(q)",
+        "a=()",
+        "declare -a arr=(1 2)",
+        "echo {a,b} pre{x,y}post {1..3} {a..e} {01..10..2}",
+        "echo {a,{b,c}} {$x,y} ${v}{a,b}",
+        "x={a,b}",
+        "echo @(a|b) !(x) ?(y) +(z|w) *(q)",
+        "echo $'a\\tb' $'\\x41'",
+        "echo ${a:1:2} ${a//x/y} ${a/x} ${a^^} ${!a} ${!a[@]} ${!p*} ${a@Q}",
+    ],
     "simple": [
         "echo hi",
         "x=1 y=2 prog a b",
@@ -259,6 +276,42 @@ try:
 
 except ImportError:  # plain-script mode
     pass
+
+
+# The ArgChar types that only bash has: `<Name>ArgChar` with the NodeName `<Name>`
+BASH_EXPANSION_NODES = ["ArrayRef", "ArrayLiteral", "ExtGlob", "Brace", "AnsiC", "ParamExp"]
+
+
+def test_bash_expansion_nodes_follow_the_naming_rule():
+    import shasta.ast_node as ast_node
+    for name in BASH_EXPANSION_NODES:
+        cls = getattr(ast_node, name + "ArgChar")
+        assert cls.NodeName == name, f"{cls.__name__}.NodeName is {cls.NodeName!r}, expected {name!r}"
+        assert issubclass(cls, ast_node.ArgChar) and issubclass(cls, ast_node.BashNode)
+
+
+def _serialise(x):
+    if hasattr(x, "json"):
+        return _serialise(x.json())
+    if isinstance(x, (list, tuple)):
+        return [_serialise(i) for i in x]
+    return x
+
+
+def test_bash_expansion_nodes_survive_json():
+    from shasta.json_to_ast import to_arg_char
+    source = ('echo ${a[0]} "${a[@]}" ${#a[@]} ${a[0]:-x} {a,b} {1..3} @(a|b) $\'a\\tb\' ${a:1:2}\n'
+              'a=(x [3]=y "z w")\n')
+    found = []
+    for stmt in parse_string(source):
+        words = list(stmt.arguments) + [a.val for a in stmt.assignments]
+        for word in words:
+            for char in word:
+                if type(char).__name__.replace("ArgChar", "") in BASH_EXPANSION_NODES:
+                    back = to_arg_char(_serialise(char))
+                    assert type(back) is type(char) and back.pretty() == char.pretty(), char
+                    found.append(type(back).__name__)
+    assert {n + "ArgChar" for n in BASH_EXPANSION_NODES} <= set(found), found
 
 
 def main() -> int:
