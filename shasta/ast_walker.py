@@ -30,6 +30,9 @@ from shasta.ast_node import (
     BraceArgChar,
     AnsiCArgChar,
     ParamExpArgChar,
+    TildeDirArgChar,
+    InShellSubstArgChar,
+    LocaleStringArgChar,
     # Command nodes
     PipeNode,
     CommandNode,
@@ -140,9 +143,13 @@ def walk_ast_node(node, visit=None, replace=None):
             return ExtGlobArgChar(op=node.op, patterns=walk(node.patterns))
         case BraceArgChar():
             return BraceArgChar(elements=walk(node.elements), sequence=node.sequence)
-        case AnsiCArgChar():
-            # Leaf node with no children to walk
+        case AnsiCArgChar() | TildeDirArgChar():
+            # Leaf nodes with no children to walk
             return node
+        case InShellSubstArgChar():
+            return InShellSubstArgChar(node=walk(node.node), reply=node.reply)
+        case LocaleStringArgChar():
+            return LocaleStringArgChar(arg=walk(node.arg))
         case ParamExpArgChar():
             return ParamExpArgChar(name=node.name, operation=node.operation, parts=walk(node.parts))
 

@@ -55,7 +55,10 @@ from .ast_node import (
     ArrayRefArgChar,
     BraceArgChar,
     ExtGlobArgChar,
+    InShellSubstArgChar,
+    LocaleStringArgChar,
     ParamExpArgChar,
+    TildeDirArgChar,
 )
 from .print_lib import UNQUOTED, separated, string_of_redirs
 
@@ -578,6 +581,7 @@ def text_to_arg_chars(text: str) -> list[ArgChar]:
 
 
 _TILDE_PREFIX = re.compile(r"~([A-Za-z0-9._-]*)(?=/|$)")
+_TILDE_DIR = re.compile(r"~([+-]?)(\d*)(?=/|$)")  # `~+` `~-` `~N` `~+N` `~-N`, but not a plain `~`
 
 
 _BRACE_SEQUENCE = re.compile(r"(-?\d+)\.\.(-?\d+)(?:\.\.(-?\d+))?\Z|([A-Za-z])\.\.([A-Za-z])(?:\.\.(-?\d+))?\Z")
@@ -632,6 +636,11 @@ def word_to_arg_chars(word: Json | None, quoted: bool = False) -> list[ArgChar]:
     chars: list[ArgChar] = []
     for i, part in enumerate((word or {}).get("Parts", [])):
         if i == 0 and not quoted and part["Type"] == "Lit":
+            dir_match = _TILDE_DIR.match(part["Value"])
+            if dir_match and (dir_match.group(1) or dir_match.group(2)):  # `~+`, `~-`, `~2`, ...
+                chars.append(TildeDirArgChar(dir_match.group(1), dir_match.group(2)))
+                chars.extend(lit_to_arg_chars({**part, "Value": part["Value"][dir_match.end():]}, quoted))
+                continue
             match = _TILDE_PREFIX.match(part["Value"])
             if match:  # `~` and `~user` expand like libdash's TArgChar
                 user = match.group(1)
@@ -686,13 +695,15 @@ def dbl_quoted_to_arg_chars(part: Json, quoted: bool = False) -> list[ArgChar]:
     inner: list[ArgChar] = []
     for p in part.get("Parts", []):
         inner.extend(word_part_to_arg_chars(p, quoted=True))
-    prefix = text_to_arg_chars("$") if part.get("Dollar") else []  # $"..." (translation)
-    return prefix + [QArgChar(inner)]
+    if part.get("Dollar"):
+        return [LocaleStringArgChar(inner)]  # $"..." (locale translation)
+    return [QArgChar(inner)]
 
 
 def cmd_subst_to_arg_chars(part: Json, quoted: bool = False) -> list[ArgChar]:
     if part.get("ReplyVar") or part.get("TempFile"):
-        raise NotImplementedError("${ cmd; } / ${| cmd; } substitution")
+        # bash 5.3's `${| cmd; }` (ReplyVar) and `${ cmd; }` (TempFile): run in the current shell, not in a subshell
+        return [InShellSubstArgChar(stmts_to_node(part.get("Stmts", [])), reply=bool(part.get("ReplyVar")))]
     return [CmdSubstArgChar(stmts_to_node(part.get("Stmts", [])))]
 
 

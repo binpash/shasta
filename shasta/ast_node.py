@@ -972,7 +972,7 @@ class AnsiCArgChar(ArgChar, BashNode):
 
     @property
     def value(self) -> str:
-        """The text with its backslash escapes decoded: `\\n \\t \\e \\xHH \\NNN \\uHHHH \\UHHHHHHHH` and the like."""
+        """The text with its backslash escapes decoded: `\\n \\t \\e \\xHH \\NNN \\uHHHH \\UHHHHHHHH \\cX` and the like."""
         import re
         text, out, i = self.text, [], 0
         while i < len(text):
@@ -989,6 +989,9 @@ class AnsiCArgChar(ArgChar, BashNode):
                 m = re.match(r"[0-7]{1,3}", text[i + 1:])
                 out.append(chr(int(m.group(), 8) & 0xFF))
                 i += 1 + len(m.group())
+            elif nxt == "c" and i + 2 < len(text):  # `\cX`: the control character for X
+                out.append("\x7f" if text[i + 2] == "?" else chr(ord(text[i + 2]) & 0x1f))
+                i += 3
             elif nxt in "xuU":
                 m = re.match(r"[0-9a-fA-F]{1,%d}" % {"x": 2, "u": 4, "U": 8}[nxt], text[i + 2:])
                 if m:
@@ -1010,6 +1013,85 @@ class AnsiCArgChar(ArgChar, BashNode):
 
     def pretty(self, quote_mode=UNQUOTED):
         return "$'" + self.text + "'"
+
+
+class TildeDirArgChar(ArgChar, BashNode):
+    """
+    A tilde prefix that names a directory from the shell's own state (`TArgChar` has `~` and `~user`):
+    `~+` (`$PWD`), `~-` (`$OLDPWD`), and `~N`, `~+N`, `~-N` (the entry `dirs` shows for N).
+    `sign` is `""`, `"+"` or `"-"`; `number` is the digits after it (`""` if there are none).
+    """
+    NodeName = "TildeDir"
+    sign: str
+    number: str
+
+    def __init__(self, sign: str, number: str = ""):
+        self.sign = sign
+        self.number = number
+
+    def __repr__(self):
+        return f'TildeDir({self.sign},{self.number})'
+
+    def format(self) -> str:
+        return self.pretty()
+
+    def json(self):
+        return make_kv(TildeDirArgChar.NodeName, [self.sign, self.number])
+
+    def pretty(self, quote_mode=UNQUOTED):
+        return "~" + self.sign + self.number
+
+
+class InShellSubstArgChar(ArgChar, BashNode):
+    """
+    Bash 5.3's command substitution that runs in the current shell, not in a subshell: `${ cmd; }` (replaced by the
+    command's output) and `${| cmd; }` (`reply` is True: replaced by the value `cmd` leaves in `$REPLY`).
+    Assignments `cmd` makes stay visible afterwards, unlike with `$(cmd)` (`BArgChar`).
+    """
+    NodeName = "InShellSubst"
+    node: Command
+    reply: bool
+
+    def __init__(self, node: Command, reply: bool = False):
+        self.node = node
+        self.reply = reply
+
+    def __repr__(self):
+        return f'InShellSubst({self.node},{self.reply})'
+
+    def format(self) -> str:
+        return self.pretty()
+
+    def json(self):
+        return make_kv(InShellSubstArgChar.NodeName, [self.node, self.reply])
+
+    def pretty(self, quote_mode=UNQUOTED):
+        body = self.node.pretty(no_braces=True) if self.node.NodeName == "Semi" else self.node.pretty()
+        return ("${| " if self.reply else "${ ") + body + "; }"
+
+
+class LocaleStringArgChar(ArgChar, BashNode):
+    """
+    A locale-translated string: `$"hello $name"`. It is a double-quoted string (`arg` is what is inside the quotes,
+    as in `QArgChar`) that bash may replace by a translation; with no translation it is just the double-quoted string.
+    """
+    NodeName = "LocaleString"
+    arg: "list[ArgChar]"
+
+    def __init__(self, arg: "list[ArgChar]"):
+        self.arg = arg
+
+    def __repr__(self):
+        return f'LocaleString({self.arg})'
+
+    def format(self) -> str:
+        return self.pretty()
+
+    def json(self):
+        return make_kv(LocaleStringArgChar.NodeName, self.arg)
+
+    def pretty(self, quote_mode=UNQUOTED):
+        return '$"' + string_of_arg(self.arg, QUOTED) + '"'
 
 
 class ParamExpArgChar(ArgChar, BashNode):

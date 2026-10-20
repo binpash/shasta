@@ -38,6 +38,11 @@ CASES = {
         "echo @(a|b) !(x) ?(y) +(z|w) *(q)",
         "echo $'a\\tb' $'\\x41'",
         "echo ${a:1:2} ${a//x/y} ${a/x} ${a^^} ${!a} ${!a[@]} ${!p*} ${a@Q}",
+        "echo ~ ~root ~+ ~- ~1 ~+2 ~-3 ~+/x ~root/x ~1abc/x",
+        "echo ${ echo hi; } ${| REPLY=x; }",
+        'echo "${ echo hi; }" ${ a=1; echo $a; }',
+        'echo $"hello" $"a $b"',
+        "echo $'\\cA\\c?'",
     ],
     "simple": [
         "echo hi",
@@ -279,7 +284,7 @@ except ImportError:  # plain-script mode
 
 
 # The ArgChar types that only bash has: `<Name>ArgChar` with the NodeName `<Name>`
-BASH_EXPANSION_NODES = ["ArrayRef", "ArrayLiteral", "ExtGlob", "Brace", "AnsiC", "ParamExp"]
+BASH_EXPANSION_NODES = ["ArrayRef", "ArrayLiteral", "ExtGlob", "Brace", "AnsiC", "ParamExp", "TildeDir", "InShellSubst", "LocaleString"]
 
 
 def test_bash_expansion_nodes_follow_the_naming_rule():
@@ -288,6 +293,14 @@ def test_bash_expansion_nodes_follow_the_naming_rule():
         cls = getattr(ast_node, name + "ArgChar")
         assert cls.NodeName == name, f"{cls.__name__}.NodeName is {cls.NodeName!r}, expected {name!r}"
         assert issubclass(cls, ast_node.ArgChar) and issubclass(cls, ast_node.BashNode)
+
+
+def test_ansi_c_control_characters_are_decoded():
+    from shasta.ast_node import AnsiCArgChar
+    assert AnsiCArgChar("\\cA").value == "\x01"
+    assert AnsiCArgChar("\\cz").value == "\x1a"
+    assert AnsiCArgChar("\\c?").value == "\x7f"
+    assert AnsiCArgChar("a\\cBb").value == "a\x02b"
 
 
 def _serialise(x):
@@ -301,6 +314,7 @@ def _serialise(x):
 def test_bash_expansion_nodes_survive_json():
     from shasta.json_to_ast import to_arg_char
     source = ('echo ${a[0]} "${a[@]}" ${#a[@]} ${a[0]:-x} {a,b} {1..3} @(a|b) $\'a\\tb\' ${a:1:2}\n'
+              'echo ~+ ~-2 ${ echo hi; } ${| REPLY=x; } $"x $y"\n'
               'a=(x [3]=y "z w")\n')
     found = []
     for stmt in parse_string(source):

@@ -137,6 +137,12 @@ def to_arg_char(arg_char):
         return AnsiCArgChar(v)
     elif k == "ParamExp":
         return ParamExpArgChar(v[0], v[1], to_arg(v[2]))
+    elif k == "TildeDir":
+        return TildeDirArgChar(v[0], v[1])
+    elif k == "InShellSubst":
+        return InShellSubstArgChar(to_ast_node(v[0]), v[1])
+    elif k == "LocaleString":
+        return LocaleStringArgChar(to_arg(v))
     assert(False)
 
 def to_case_list(case_list):
