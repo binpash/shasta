@@ -125,6 +125,24 @@ def to_arg_char(arg_char):
         return BArgChar(to_ast_node(v))
     elif k == "P":
         return PArgChar(v[0], to_ast_node(v[1]))
+    elif k == "ArrayRef":
+        return ArrayRefArgChar(v[0], v[1], v[2], to_arg(v[3]), to_arg(v[4]))
+    elif k == "ArrayLiteral":
+        return ArrayLiteralArgChar([(None if index is None else to_arg(index), to_arg(value)) for index, value in v])
+    elif k == "ExtGlob":
+        return ExtGlobArgChar(v[0], to_args(v[1]))
+    elif k == "Brace":
+        return BraceArgChar(to_args(v[0]), v[1])
+    elif k == "AnsiC":
+        return AnsiCArgChar(v)
+    elif k == "ParamExp":
+        return ParamExpArgChar(v[0], v[1], to_arg(v[2]))
+    elif k == "TildeDir":
+        return TildeDirArgChar(v[0], v[1])
+    elif k == "InShellSubst":
+        return InShellSubstArgChar(to_ast_node(v[0]), v[1])
+    elif k == "LocaleString":
+        return LocaleStringArgChar(to_arg(v))
     assert(False)
 
 def to_case_list(case_list):

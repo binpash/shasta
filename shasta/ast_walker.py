@@ -23,6 +23,16 @@ from shasta.ast_node import (
     VArgChar,
     QArgChar,
     BArgChar,
+    # Bash expansion ArgChar types
+    ArrayRefArgChar,
+    ArrayLiteralArgChar,
+    ExtGlobArgChar,
+    BraceArgChar,
+    AnsiCArgChar,
+    ParamExpArgChar,
+    TildeDirArgChar,
+    InShellSubstArgChar,
+    LocaleStringArgChar,
     # Command nodes
     PipeNode,
     CommandNode,
@@ -117,6 +127,31 @@ def walk_ast_node(node, visit=None, replace=None):
             return BArgChar(
                 node=walk(node.node),
             )
+        case ArrayRefArgChar():
+            return ArrayRefArgChar(
+                fmt=node.fmt,
+                null=node.null,
+                var=node.var,
+                index=walk(node.index),
+                arg=walk(node.arg),
+            )
+        case ArrayLiteralArgChar():
+            return ArrayLiteralArgChar(
+                [(None if index is None else walk(index), walk(value)) for index, value in node.elements]
+            )
+        case ExtGlobArgChar():
+            return ExtGlobArgChar(op=node.op, patterns=walk(node.patterns))
+        case BraceArgChar():
+            return BraceArgChar(elements=walk(node.elements), sequence=node.sequence)
+        case AnsiCArgChar() | TildeDirArgChar():
+            # Leaf nodes with no children to walk
+            return node
+        case InShellSubstArgChar():
+            return InShellSubstArgChar(node=walk(node.node), reply=node.reply)
+        case LocaleStringArgChar():
+            return LocaleStringArgChar(arg=walk(node.arg))
+        case ParamExpArgChar():
+            return ParamExpArgChar(name=node.name, operation=node.operation, parts=walk(node.parts))
 
         # Command nodes
         case PipeNode():

@@ -12,7 +12,7 @@ sys.setrecursionlimit(10000)
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, ROOT_DIR)
 
-from shasta.gosh_to_shasta_ast import parse  # noqa: E402
+from shasta.shfmt_to_shasta_ast import parse  # noqa: E402
 from shasta.ast_node import make_typed_semi_sequence  # noqa: E402
 
 
