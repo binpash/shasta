@@ -1,7 +1,7 @@
 name: PaSh Downstream Tests
 
 on:
-  pull_request_target:
+  pull_request:
     types: [assigned, opened, synchronize, reopened, ready_for_review]
     paths:
       - shasta/**
